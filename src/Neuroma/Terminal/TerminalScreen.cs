@@ -22,6 +22,13 @@ internal sealed class TerminalScreen : IDisposable
         Console.Write(TextWrapper.Fit(text, Width)); Console.ResetColor();
     }
 
+    public void WriteRgbRow(int row, string text, RgbColor foreground)
+    {
+        if (row < 0 || row >= Height) return;
+        Console.SetCursorPosition(0, row); Console.BackgroundColor = ConsoleColor.Black;
+        WriteForeground(foreground); Console.Write(TextWrapper.Fit(text, Width)); Console.ResetColor();
+    }
+
     public void WriteImageRow(int row, int left, string ansiContent)
     {
         if (row < 0 || row >= Height) return;

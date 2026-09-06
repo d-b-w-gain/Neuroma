@@ -266,8 +266,8 @@ public sealed class ReaderApp
     private void Draw()
     {
         EpubChapter chapter = _book.GetChapter(_chapterIndex);
-        _screen.WriteRow(0, $" ─ Neuroma  {_book.Metadata.Title}  •  {chapter.Title}  [{_chapterIndex + 1}/{_book.ChapterCount}]",
-            ConsoleColor.Gray);
+        _screen.WriteRgbRow(0, $" ─ Neuroma  {_book.Metadata.Title}  •  {chapter.Title}  [{_chapterIndex + 1}/{_book.ChapterCount}]",
+            TerminalTheme.Header);
         int contentWidth = Math.Max(20, Math.Min(100, _screen.Width - 4)); int left = Math.Max(0, (_screen.Width - contentWidth) / 2);
         string margin = new(' ', left);
         SpeechCue? currentCue = _narrator.CurrentCue;
@@ -301,8 +301,9 @@ public sealed class ReaderApp
         string speech = _narrator.IsRunning || !_narrator.Status.EndsWith("READY", StringComparison.Ordinal)
             ? $"  {_narrator.Status}" : "";
         string colorMode = _colorMode.ToString().ToLowerInvariant();
-        _screen.WriteRow(_screen.Height - 1, $" ─ {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  s speak  c {colorMode}  q quit{search}{speech}",
-            ConsoleColor.DarkGray);
+        _screen.WriteRgbRow(_screen.Height - 1,
+            $" ─ {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  s speak  c {colorMode}  q quit{search}{speech}",
+            TerminalTheme.Footer);
     }
 
     private int FindActiveParagraph(SpeechCue? cue)
@@ -373,7 +374,7 @@ public sealed class ReaderApp
         int top = Math.Max(0, selected - BodyHeight / 2);
         while (true)
         {
-            _screen.WriteRow(0, " ─ Table of contents — ↑↓ select, Enter open, Esc close", ConsoleColor.Gray);
+            _screen.WriteRgbRow(0, " ─ Table of contents — ↑↓ select, Enter open, Esc close", TerminalTheme.Header);
             for (int row = 0; row < BodyHeight; row++)
             {
                 int index = top + row;
@@ -382,7 +383,7 @@ public sealed class ReaderApp
                 string label = $"{(index == selected ? '›' : ' ')} {indent}{entry.Label}";
                 _screen.WriteRow(row + 1, label, index == selected ? ConsoleColor.Cyan : ConsoleColor.Gray);
             }
-            _screen.WriteRow(_screen.Height - 1, $" ─ {selected + 1}/{entries.Count}", ConsoleColor.DarkGray);
+            _screen.WriteRgbRow(_screen.Height - 1, $" ─ {selected + 1}/{entries.Count}", TerminalTheme.Footer);
             ConsoleKeyInfo key = Console.ReadKey(true); if (key.Key is ConsoleKey.Escape or ConsoleKey.Q) return;
             if (key.Key == ConsoleKey.Enter) { _chapterIndex = entries[selected].ChapterIndex; _offset = 0; Rewrap(); return; }
             int delta = key.Key switch { ConsoleKey.DownArrow or ConsoleKey.J => 1, ConsoleKey.UpArrow or ConsoleKey.K => -1,
@@ -406,9 +407,9 @@ public sealed class ReaderApp
         $"Chapters:   {_book.ChapterCount}", $"File:       {_book.FilePath}", "", "Press any key to return."]);
     private void ShowOverlay(string title, IReadOnlyList<string> lines)
     {
-        _screen.WriteRow(0, $" ─ {title}", ConsoleColor.Gray);
+        _screen.WriteRgbRow(0, $" ─ {title}", TerminalTheme.Header);
         for (int row = 0; row < BodyHeight; row++) _screen.WriteRow(row + 1, row < lines.Count ? $"  {lines[row]}" : "", ConsoleColor.Gray);
-        _screen.WriteRow(_screen.Height - 1, " ─ Any key returns to the book", ConsoleColor.DarkGray); Console.ReadKey(true);
+        _screen.WriteRgbRow(_screen.Height - 1, " ─ Any key returns to the book", TerminalTheme.Footer); Console.ReadKey(true);
     }
     private void FlashMessage(string message)
     { _screen.WriteRow(_screen.Height - 1, $" ! {message}  Press any key.", ConsoleColor.Red); Console.ReadKey(true); }

@@ -12,7 +12,7 @@ public static class Program
     {
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Any(a => a is "--help" or "-h")) { PrintHelp(); return 0; }
-        if (args.Any(a => a is "--version" or "-v")) { Console.WriteLine("Neuroma 0.5.0"); return 0; }
+        if (args.Any(a => a is "--version" or "-v")) { Console.WriteLine("Neuroma 0.5.1"); return 0; }
 
         bool plain = args.Any(a => a == "--plain") || Console.IsOutputRedirected;
         SpeechSettings speechSettings;

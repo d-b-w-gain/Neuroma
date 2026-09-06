@@ -14,6 +14,8 @@ internal readonly record struct RgbColor(byte Red, byte Green, byte Blue)
 
 internal static class TerminalTheme
 {
+    public static readonly RgbColor Header = new(132, 133, 129);
+    public static readonly RgbColor Footer = new(101, 102, 99);
     private static readonly RgbColor Body = new(202, 200, 194);
     private static readonly RgbColor Dialogue = new(174, 202, 180);
     private static readonly RgbColor Emphasis = new(211, 188, 128);

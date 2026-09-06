@@ -45,6 +45,8 @@ with** list for `.epub` files. This is per-user and needs no administrator acces
 Neuroma uses a low-glare, black-background colour scheme with no solid colour
 bars. Windows Terminal can also enter its native fullscreen mode with `F11` or
 `Alt+Enter`, depending on its configured shortcuts.
+The header and footer use darker neutral greys so the book remains the clearest
+and brightest layer on screen.
 
 Gentle colour mode is enabled by default. It gives quoted speech a muted sage
 foreground while leaving dialogue attribution as neutral prose, and preserves
