@@ -11,6 +11,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
 - Helpful malformed-file and DRM errors
+- Embedded Neuroma application icon for Windows shortcuts and file associations
 - No runtime package dependencies
 
 ## Use
