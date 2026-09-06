@@ -45,6 +45,31 @@ internal sealed class TerminalScreen : IDisposable
         Console.Write(highlighted);
         Console.ResetColor();
     }
+
+    public void WriteStyledRow(int row, string prefix, string content, IReadOnlyList<RgbColor> colors,
+        int highlightStart = -1, int highlightEnd = -1)
+    {
+        if (row < 0 || row >= Height) return;
+        WriteRow(row, "", ConsoleColor.Gray);
+        Console.SetCursorPosition(0, row);
+        WriteForeground(new RgbColor(202, 200, 194));
+        Console.Write(prefix);
+        RgbColor? activeColor = null;
+        bool highlighted = false;
+        for (int index = 0; index < content.Length && prefix.Length + index < Width; index++)
+        {
+            bool nextHighlight = index >= highlightStart && index < highlightEnd;
+            RgbColor color = index < colors.Count ? colors[index] : new RgbColor(202, 200, 194);
+            if (nextHighlight != highlighted || (!nextHighlight && color != activeColor))
+            {
+                highlighted = nextHighlight; activeColor = color;
+                if (highlighted) Console.Write("\x1b[38;2;18;18;18m\x1b[48;2;205;202;193m");
+                else { Console.Write("\x1b[49m"); WriteForeground(color); }
+            }
+            Console.Write(content[index]);
+        }
+        Console.Write("\x1b[0m");
+    }
     public string? Prompt(string label)
     {
         int row = Height - 1; WriteRow(row, "", ConsoleColor.Gray);
@@ -71,6 +96,8 @@ internal sealed class TerminalScreen : IDisposable
         if (handle == -1 || !GetConsoleMode(handle, out uint mode)) return;
         SetConsoleMode(handle, mode | EnableVirtualTerminalProcessing);
     }
+    private static void WriteForeground(RgbColor color)
+        => Console.Write($"\x1b[38;2;{color.Red};{color.Green};{color.Blue}m");
     [DllImport("kernel32.dll", SetLastError = true)] private static extern nint GetStdHandle(int nStdHandle);
     [DllImport("kernel32.dll")] private static extern nint GetConsoleWindow();
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetConsoleMode(nint h, out uint mode);

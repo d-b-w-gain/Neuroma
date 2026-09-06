@@ -12,6 +12,8 @@ public sealed class ReaderApp
     private int _chapterIndex, _offset, _lastWidth; private IReadOnlyList<DisplayLine> _wrappedLines = []; private string? _searchQuery;
     private int _drawRequested = 1;
     private SpeechCue? _appliedCue;
+    private ReaderColorMode _colorMode = Environment.GetEnvironmentVariable("NO_COLOR") is null
+        ? ReaderColorMode.Gentle : ReaderColorMode.Plain;
     private int BodyHeight => Math.Max(1, _screen.Height - 2);
 
     public ReaderApp(EpubBook book, ProgressStore progressStore, SpeechSettings speechSettings)
@@ -74,6 +76,7 @@ public sealed class ReaderApp
             case ConsoleKey.T: StopNarrationForModal(); ShowTableOfContents(); break;
             case ConsoleKey.F11: _screen.ToggleMaximize(); break;
             case ConsoleKey.S when key.KeyChar == 's': ToggleNarration(); break;
+            case ConsoleKey.C when key.KeyChar == 'c': CycleColorMode(); break;
             case ConsoleKey.Oem2 when key.KeyChar == '/': StopNarrationForModal(); StartSearch(); break;
             case ConsoleKey.N: FindMatch(key.Modifiers.HasFlag(ConsoleModifiers.Shift)); break;
             case ConsoleKey.I: StopNarrationForModal(); ShowInfo(); break;
@@ -88,6 +91,16 @@ public sealed class ReaderApp
                 break;
         }
         return true;
+    }
+
+    private void CycleColorMode()
+    {
+        _colorMode = _colorMode switch
+        {
+            ReaderColorMode.Plain => ReaderColorMode.Gentle,
+            ReaderColorMode.Gentle => ReaderColorMode.Focus,
+            _ => ReaderColorMode.Plain
+        };
     }
 
     private void Scroll(int amount)
@@ -211,19 +224,23 @@ public sealed class ReaderApp
     private IReadOnlyList<DisplayLine> BuildDisplayLines(EpubChapter chapter, int width, bool renderImages)
     {
         var result = new List<DisplayLine>();
+        int paragraphId = 0;
         foreach (EpubElement element in chapter.Elements)
         {
             if (element is EpubText text)
             {
-                result.AddRange(TextWrapper.Wrap([text.Text], width).Select(line => new DisplayLine(line)));
+                int id = text.Text.Length == 0 ? -1 : paragraphId++;
+                result.AddRange(TextWrapper.WrapStyled(text, width, id)
+                    .Select(line => new DisplayLine(line.Text, Styles: line.Styles, ParagraphId: line.ParagraphId)));
                 continue;
             }
             if (element is EpubDropCap dropCap)
             {
-                result.AddRange(TerminalDropCapRenderer.Render(dropCap, width));
+                result.AddRange(TerminalDropCapRenderer.Render(dropCap, width, paragraphId++));
                 continue;
             }
             if (element is not EpubImage image) continue;
+            paragraphId++;
 
             try
             {
@@ -253,21 +270,55 @@ public sealed class ReaderApp
             ConsoleColor.Gray);
         int contentWidth = Math.Max(20, Math.Min(100, _screen.Width - 4)); int left = Math.Max(0, (_screen.Width - contentWidth) / 2);
         string margin = new(' ', left);
+        SpeechCue? currentCue = _narrator.CurrentCue;
+        int activeParagraph = FindActiveParagraph(currentCue);
         for (int row = 0; row < BodyHeight; row++)
         {
             int index = _offset + row; DisplayLine line = index < _wrappedLines.Count ? _wrappedLines[index] : new DisplayLine("");
             if (line.IsImage) _screen.WriteImageRow(row + 1, left, line.Content);
-            else if (_narrator.CurrentCue is SpeechCue cue && cue.ChapterIndex == _chapterIndex && cue.LineIndex == index)
-                _screen.WriteHighlightedRow(row + 1, margin, line.Content, cue.ColumnStart, cue.ColumnEnd, ColorFor(line.Content));
-            else _screen.WriteRow(row + 1, margin + line.Content, ColorFor(line.Content));
+            else if (_colorMode == ReaderColorMode.Plain)
+            {
+                if (currentCue is SpeechCue cue && cue.ChapterIndex == _chapterIndex && cue.LineIndex == index)
+                    _screen.WriteHighlightedRow(row + 1, margin, line.Content, cue.ColumnStart, cue.ColumnEnd, ColorFor(line.Content));
+                else _screen.WriteRow(row + 1, margin + line.Content, ColorFor(line.Content));
+            }
+            else
+            {
+                bool dim = _colorMode == ReaderColorMode.Focus && line.ParagraphId >= 0 && line.ParagraphId != activeParagraph;
+                IReadOnlyList<RgbColor> colors = Enumerable.Range(0, line.Content.Length)
+                    .Select(column => TerminalTheme.ColorFor(line.Content,
+                        line.Styles is { } styles && column < styles.Count ? styles[column] : EpubTextStyle.Normal, dim))
+                    .ToArray();
+                int highlightStart = currentCue is SpeechCue styledCue && styledCue.ChapterIndex == _chapterIndex && styledCue.LineIndex == index
+                    ? styledCue.ColumnStart : -1;
+                int highlightEnd = highlightStart >= 0 ? currentCue!.ColumnEnd : -1;
+                _screen.WriteStyledRow(row + 1, margin, line.Content, colors, highlightStart, highlightEnd);
+            }
         }
         int max = Math.Max(1, _wrappedLines.Count - BodyHeight); double chapterProgress = Math.Clamp((double)_offset / max, 0, 1);
         double bookProgress = (_chapterIndex + chapterProgress) / _book.ChapterCount;
         string search = string.IsNullOrEmpty(_searchQuery) ? "" : $"  /{_searchQuery}";
         string speech = _narrator.IsRunning || !_narrator.Status.EndsWith("READY", StringComparison.Ordinal)
             ? $"  {_narrator.Status}" : "";
-        _screen.WriteRow(_screen.Height - 1, $" ─ {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  s speak  q quit{search}{speech}",
+        string colorMode = _colorMode.ToString().ToLowerInvariant();
+        _screen.WriteRow(_screen.Height - 1, $" ─ {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  s speak  c {colorMode}  q quit{search}{speech}",
             ConsoleColor.DarkGray);
+    }
+
+    private int FindActiveParagraph(SpeechCue? cue)
+    {
+        if (cue is { ChapterIndex: var chapter, LineIndex: var line } && chapter == _chapterIndex &&
+            line >= 0 && line < _wrappedLines.Count && _wrappedLines[line].ParagraphId >= 0)
+            return _wrappedLines[line].ParagraphId;
+        int preferred = Math.Clamp(_offset, 0, Math.Max(0, _wrappedLines.Count - 1));
+        for (int distance = 0; distance < _wrappedLines.Count; distance++)
+        {
+            int after = preferred + distance;
+            if (after < _wrappedLines.Count && _wrappedLines[after].ParagraphId >= 0) return _wrappedLines[after].ParagraphId;
+            int before = preferred - distance;
+            if (before >= 0 && _wrappedLines[before].ParagraphId >= 0) return _wrappedLines[before].ParagraphId;
+        }
+        return -1;
     }
     private static ConsoleColor ColorFor(string line)
     {
@@ -346,7 +397,8 @@ public sealed class ReaderApp
         "PgUp          Previous page", "h / ←         Previous chapter", "l / →         Next chapter",
         "g / G         Chapter start / end", "t             Table of contents", "/             Search the whole book",
         "n / N         Next / previous result", "s             Read aloud / stop (Kokoro)",
-        "i             Book information", "F11           Maximize / restore window", "q / Esc       Quit", "",
+        "c             Cycle plain / gentle / focus colour", "i             Book information",
+        "F11           Maximize / restore window", "q / Esc       Quit", "",
         "Speech config: neuroma.json beside Neuroma.exe", "Overrides: --kokoro-url, --voice, --speed", "", "Press any key to return."]);
     private void ShowInfo() => ShowOverlay("Book information", [
         $"Title:      {_book.Metadata.Title}", $"Author:     {Fallback(_book.Metadata.Creator)}",

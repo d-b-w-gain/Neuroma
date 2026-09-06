@@ -2,8 +2,24 @@ namespace Neuroma.Epub;
 
 public sealed record EpubMetadata(string Title, string Creator, string Language, string Identifier);
 public abstract record EpubElement;
-public sealed record EpubText(string Text) : EpubElement;
-public sealed record EpubDropCap(string Prefix, char Initial, string Remainder) : EpubElement
+[Flags]
+public enum EpubTextStyle : byte
+{
+    Normal = 0,
+    Emphasis = 1,
+    Strong = 2,
+    Code = 4,
+    Link = 8,
+    Blockquote = 16,
+    Dialogue = 32,
+    DropCap = 64
+}
+public sealed record EpubText(string Text, IReadOnlyList<EpubTextStyle>? Styles = null) : EpubElement;
+public sealed record EpubDropCap(
+    string Prefix,
+    char Initial,
+    string Remainder,
+    IReadOnlyList<EpubTextStyle>? Styles = null) : EpubElement
 {
     public string Text => $"{Prefix}{Initial}{Remainder}";
 }

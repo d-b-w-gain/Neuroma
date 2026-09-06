@@ -8,6 +8,8 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 - EPUB 2 and EPUB 3 reading order and table of contents
 - Reflowing XHTML terminal rendering: headings, paragraphs, lists, quotes, code, and images
 - Two-row terminal drop caps for EPUB small-cap scene openings
+- Gentle semantic colour for dialogue, emphasis, links, code, and quotations
+- Optional paragraph-focus colour mode with no character-attribution guesses
 - Chapter/page navigation and whole-book search
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
@@ -35,6 +37,7 @@ with** list for `.epub` files. This is per-user and needs no administrator acces
 | `t` | Table of contents |
 | `/`, then `n` / `N` | Search; next / previous result |
 | `s` | Start or stop Kokoro narration |
+| `c` | Cycle Gentle, Focus, and Plain colour modes |
 | `i` / `?` | Book information / help |
 | `F11` | Maximize or restore the terminal window |
 | `q`, Escape | Quit |
@@ -42,6 +45,14 @@ with** list for `.epub` files. This is per-user and needs no administrator acces
 Neuroma uses a low-glare, black-background colour scheme with no solid colour
 bars. Windows Terminal can also enter its native fullscreen mode with `F11` or
 `Alt+Enter`, depending on its configured shortcuts.
+
+Gentle colour mode is enabled by default. It gives quoted speech a muted sage
+foreground while leaving dialogue attribution as neutral prose, and preserves
+EPUB emphasis, strong text, code, links, blockquotes, headings, and scene
+dividers as restrained semantic accents. Focus mode keeps the paragraph near
+the reading position—or the paragraph currently spoken by Kokoro—bright while
+dimming surrounding prose. Plain mode restores the original 16-colour display.
+Set the standard `NO_COLOR` environment variable to start in Plain mode.
 
 Use `Neuroma --plain book.epub` for non-interactive output.
 

@@ -1,10 +1,33 @@
 using System.Globalization;
 using System.Text;
+using Neuroma.Epub;
 
 namespace Neuroma.Terminal;
 
 internal static class TextWrapper
 {
+    public static IReadOnlyList<StyledWrappedLine> WrapStyled(EpubText source, int width, int paragraphId)
+    {
+        width = Math.Max(8, width);
+        if (source.Text.Length == 0) return [new StyledWrappedLine("", [], paragraphId)];
+        string continuation = ContinuationIndent(source.Text);
+        string remaining = source.Text;
+        EpubTextStyle[] styles = NormalizeStyles(source.Styles, source.Text.Length);
+        var result = new List<StyledWrappedLine>();
+        while (DisplayWidth(remaining) > width)
+        {
+            int cut = FindCut(remaining, width);
+            int visibleLength = remaining[..cut].TrimEnd().Length;
+            result.Add(new StyledWrappedLine(remaining[..visibleLength], styles[..visibleLength], paragraphId));
+            int next = cut;
+            while (next < remaining.Length && char.IsWhiteSpace(remaining[next])) next++;
+            remaining = continuation + remaining[next..];
+            styles = Enumerable.Repeat(EpubTextStyle.Normal, continuation.Length).Concat(styles[next..]).ToArray();
+        }
+        result.Add(new StyledWrappedLine(remaining, styles, paragraphId));
+        return result;
+    }
+
     public static IReadOnlyList<string> Wrap(IReadOnlyList<string> source, int width)
     {
         width = Math.Max(8, width); var result = new List<string>();
@@ -61,5 +84,14 @@ internal static class TextWrapper
         if (line.StartsWith('#')) return "  ";
         return "";
     }
+
+    private static EpubTextStyle[] NormalizeStyles(IReadOnlyList<EpubTextStyle>? styles, int length)
+    {
+        var result = new EpubTextStyle[length];
+        if (styles is null) return result;
+        for (int index = 0; index < length && index < styles.Count; index++) result[index] = styles[index];
+        return result;
+    }
 }
 
+internal sealed record StyledWrappedLine(string Text, IReadOnlyList<EpubTextStyle> Styles, int ParagraphId);

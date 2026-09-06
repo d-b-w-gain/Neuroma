@@ -42,6 +42,8 @@ internal static class Program
                 <p class="para-flush"><span class="sans">M<span class="smallcap">OLLY FISHED THE</span></span> key out.</p>
                 <p><span>cyber</span><i>space</i> cowboy</p>
                 <p><span>Hello</span> <i>styled</i> world</p>
+                <p>“Hello,” Molly said. “Goodbye.”</p>
+                <p>"Hello," Case said.</p>
                 <p class="para-flush"><span class="sans">“C<span class="SCAP">HRIST ON A</span></span> crutch.”</p>
                 </body></html>
                 """, "OEBPS/text/chapter.xhtml");
@@ -55,11 +57,39 @@ internal static class Program
                 "keeps searchable and spoken drop-cap text intact");
             Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "cyberspace cowboy"),
                 "preserves real whitespace across inline XHTML styling");
+            EpubText inlineStyles = styledOpening.OfType<EpubText>().Single(text => text.Text == "cyberspace cowboy");
+            int emphasisStart = inlineStyles.Text.IndexOf("space", StringComparison.Ordinal);
+            Assert(inlineStyles.Styles is { } emphasisStyles && emphasisStyles.Skip(emphasisStart).Take(5)
+                .All(style => style.HasFlag(EpubTextStyle.Emphasis)), "preserves EPUB emphasis semantics");
+            Assert(TextWrapper.WrapStyled(inlineStyles, 8, 3).Any(line =>
+                line.Styles.Any(style => style.HasFlag(EpubTextStyle.Emphasis))),
+                "preserves semantic styling while wrapping terminal lines");
             Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "Hello styled world"),
                 "preserves whitespace-only nodes between inline elements");
+            EpubText dialogue = styledOpening.OfType<EpubText>().Single(text => text.Text.Contains("Molly said", StringComparison.Ordinal));
+            Assert(dialogue.Styles is { } dialogueStyles &&
+                dialogueStyles[dialogue.Text.IndexOf("Hello", StringComparison.Ordinal)].HasFlag(EpubTextStyle.Dialogue) &&
+                !dialogueStyles[dialogue.Text.IndexOf("Molly", StringComparison.Ordinal)].HasFlag(EpubTextStyle.Dialogue) &&
+                dialogueStyles[dialogue.Text.IndexOf("Goodbye", StringComparison.Ordinal)].HasFlag(EpubTextStyle.Dialogue),
+                "colours quoted speech without colouring its attribution");
+            EpubText straightDialogue = styledOpening.OfType<EpubText>().Single(text => text.Text.Contains("Case said", StringComparison.Ordinal));
+            Assert(straightDialogue.Styles is { } straightStyles && straightStyles[0].HasFlag(EpubTextStyle.Dialogue) &&
+                straightStyles[straightDialogue.Text.IndexOf("\" Case", StringComparison.Ordinal)].HasFlag(EpubTextStyle.Dialogue),
+                "recognizes straight quotation marks");
             EpubDropCap quoted = styledOpening.OfType<EpubDropCap>().Last();
             Assert(quoted.Prefix == "“" && quoted.Initial == 'C' && quoted.Text == "“CHRIST ON A crutch.”",
                 "keeps opening punctuation attached to a drop cap");
+            Assert(quoted.Styles is { } quotedStyles && quotedStyles.All(style => style.HasFlag(EpubTextStyle.Dialogue)),
+                "colours dialogue that begins with a drop cap");
+            EpubText blockquote = book.GetChapter(0).Elements.OfType<EpubText>()
+                .Single(text => text.Text.Contains("Readable and calm", StringComparison.Ordinal));
+            Assert(blockquote.Styles is { } quoteStyles && quoteStyles.Any(style => style.HasFlag(EpubTextStyle.Blockquote)),
+                "preserves EPUB blockquote semantics");
+            RgbColor bodyColour = TerminalTheme.ColorFor("Body", EpubTextStyle.Normal, dim: false);
+            RgbColor dialogueColour = TerminalTheme.ColorFor("“Hello”", EpubTextStyle.Dialogue, dim: false);
+            RgbColor dimmedDialogue = TerminalTheme.ColorFor("“Hello”", EpubTextStyle.Dialogue, dim: true);
+            Assert(bodyColour != dialogueColour && dimmedDialogue.Red < dialogueColour.Red,
+                "uses distinct gentle and focus-mode colours");
             string progressPath = Path.Combine(directory, "progress.json"); var store = new ProgressStore(progressPath);
             store.Save(epubPath, new(1, 0.5, DateTimeOffset.UtcNow));
             ReadingPosition restored = new ProgressStore(progressPath).Get(epubPath);
@@ -94,10 +124,22 @@ internal static class Program
     private static int CheckExternalBook(string path)
     {
         using EpubBook book = EpubLoader.Open(path);
-        int referenced = 0, rendered = 0, unavailable = 0;
+        int referenced = 0, rendered = 0, unavailable = 0, dialogueCharacters = 0, emphasizedCharacters = 0, dropCaps = 0;
         for (int chapterIndex = 0; chapterIndex < book.ChapterCount; chapterIndex++)
         {
-            foreach (EpubImage image in book.GetChapter(chapterIndex).Elements.OfType<EpubImage>())
+            EpubChapter chapter = book.GetChapter(chapterIndex);
+            dropCaps += chapter.Elements.OfType<EpubDropCap>().Count();
+            foreach (IReadOnlyList<EpubTextStyle> styles in chapter.Elements.Select(element => element switch
+                     {
+                         EpubText { Styles: { } values } => values,
+                         EpubDropCap { Styles: { } values } => values,
+                         _ => null
+                     }).Where(styles => styles is not null).Cast<IReadOnlyList<EpubTextStyle>>())
+            {
+                dialogueCharacters += styles.Count(style => style.HasFlag(EpubTextStyle.Dialogue));
+                emphasizedCharacters += styles.Count(style => style.HasFlag(EpubTextStyle.Emphasis));
+            }
+            foreach (EpubImage image in chapter.Elements.OfType<EpubImage>())
             {
                 referenced++;
                 byte[]? data = book.ReadResource(image.EntryPath);
@@ -107,6 +149,7 @@ internal static class Program
             }
         }
         Console.WriteLine($"Checked {book.Metadata.Title}: {rendered}/{referenced} images rendered; {unavailable} fallbacks.");
+        Console.WriteLine($"Semantic styling: {dialogueCharacters} dialogue characters, {emphasizedCharacters} emphasized characters, {dropCaps} drop caps.");
         return unavailable == 0 ? 0 : 1;
     }
     private static void Assert(bool condition, string behavior)

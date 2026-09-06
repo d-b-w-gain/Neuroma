@@ -1,4 +1,5 @@
 using Spectre.Console;
+using Neuroma.Epub;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -49,7 +50,9 @@ internal sealed record DisplayLine(
     string Content,
     bool IsImage = false,
     string? SpokenText = null,
-    IReadOnlyList<int>? SpokenColumnMap = null)
+    IReadOnlyList<int>? SpokenColumnMap = null,
+    IReadOnlyList<EpubTextStyle>? Styles = null,
+    int ParagraphId = -1)
 {
     public string SearchText => IsImage ? "" : SpokenText ?? Content;
 }
