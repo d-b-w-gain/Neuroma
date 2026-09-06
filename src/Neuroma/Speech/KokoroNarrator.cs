@@ -104,16 +104,20 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
 
     private async Task RunAsync(IReadOnlyList<SpeechChunk> chunks, CancellationToken cancellationToken)
     {
-        for (int index = 0; index < chunks.Count; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            SetStatus($"KOKORO · GENERATING {index + 1}/{chunks.Count} · {_settings.Voice}");
-            SpeechResult speech = await RequestSpeechAsync(chunks[index], cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            IReadOnlyList<SpeechCue> cues = BuildCues(chunks[index], speech.Timestamps);
-            SetStatus($"KOKORO · {(speech.Exact ? "EXACT" : "ESTIMATED")} WORD TIMING · s TO STOP");
-            await PlaySpeechAsync(speech.Audio, cues, cancellationToken).ConfigureAwait(false);
-        }
+        SetStatus($"KOKORO · GENERATING 1/{chunks.Count} · {_settings.Voice}");
+        await SpeechPrefetchPipeline.RunAsync(
+            chunks,
+            (chunk, _, token) => RequestSpeechAsync(chunk, token),
+            async (chunk, speech, index, hasNext, token) =>
+            {
+                IReadOnlyList<SpeechCue> cues = BuildCues(chunk, speech.Timestamps);
+                string prefetch = hasNext ? $" · PREFETCHING {index + 2}/{chunks.Count}" : "";
+                SetStatus($"KOKORO · PLAYING {index + 1}/{chunks.Count} · " +
+                    $"{(speech.Exact ? "EXACT" : "ESTIMATED")} TIMING{prefetch} · s TO STOP");
+                await PlaySpeechAsync(speech.Audio, cues, token).ConfigureAwait(false);
+            },
+            index => SetStatus($"KOKORO · WAITING FOR BUFFER {index + 1}/{chunks.Count}"),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<SpeechResult> RequestSpeechAsync(SpeechChunk chunk, CancellationToken cancellationToken)

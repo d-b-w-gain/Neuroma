@@ -12,6 +12,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
 - Kokoro read-aloud from the current page with timed word highlighting
+- One-segment Kokoro prefetching for continuous playback between sections
 - Helpful malformed-file and DRM errors
 - Embedded Neuroma application icon for Windows shortcuts and file associations
 - No runtime package dependencies
@@ -50,7 +51,8 @@ Press `s` to read from the first visible line through the rest of the book, and
 press `s` again to stop. Neuroma uses Kokoro's captioned-speech endpoint when it
 is available, highlighting each spoken word and following narration into the
 next chapter. It automatically falls back to `/v1/audio/speech` with estimated
-word timing on older Kokoro servers.
+word timing on older Kokoro servers. While one segment plays, Neuroma generates
+and buffers the next segment and its timestamps to minimize pauses.
 
 Copy `neuroma.example.json` to `neuroma.json` beside `Neuroma.exe` (or keep it
 in the working directory) and set the same endpoint, voice, and speed used by

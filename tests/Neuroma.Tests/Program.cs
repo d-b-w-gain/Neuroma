@@ -70,6 +70,22 @@ internal static class Program
             Assert(speech.KokoroUrl == "http://localhost:9999" && speech.Voice == "af_test" &&
                 Math.Abs(speech.Speed - 1.5) < 0.001, "loads Kokoro command-line settings");
             Assert(consumed.SetEquals([0, 1, 2, 3, 4]), "keeps the EPUB path separate from speech options");
+            bool nextStartedBeforePlayback = false;
+            var played = new List<int>();
+            SpeechPrefetchPipeline.RunAsync<int, int>([0, 1, 2],
+                async (item, index, token) =>
+                {
+                    if (index == 1) nextStartedBeforePlayback = true;
+                    await Task.Delay(5, token); return item;
+                },
+                async (_, generated, index, hasNext, token) =>
+                {
+                    if (index == 0) Assert(hasNext && nextStartedBeforePlayback,
+                        "starts generating the next speech segment before current playback");
+                    played.Add(generated); await Task.Delay(10, token);
+                },
+                waitingFor: null, CancellationToken.None).GetAwaiter().GetResult();
+            Assert(played.SequenceEqual([0, 1, 2]), "plays prefetched speech segments in order");
             Console.WriteLine("All Neuroma tests passed."); return 0;
         }
         finally { Directory.Delete(directory, recursive: true); }
