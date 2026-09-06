@@ -1,0 +1,12 @@
+bin/
+obj/
+dist/
+.vs/
+.idea/
+*.user
+*.suo
+*.exe
+*.next.exe
+*.reg
+NeuroMD*
+Register-NeuroMD.*
