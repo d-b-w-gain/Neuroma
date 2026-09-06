@@ -30,6 +30,21 @@ internal sealed class TerminalScreen : IDisposable
         Console.Write(ansiContent);
         Console.Write("\x1b[0m");
     }
+
+    public void WriteHighlightedRow(int row, string prefix, string content, int start, int end, ConsoleColor foreground)
+    {
+        WriteRow(row, prefix + content, foreground);
+        start = Math.Clamp(start, 0, content.Length);
+        end = Math.Clamp(end, start, content.Length);
+        int column = prefix.Length + start;
+        if (end <= start || column >= Width) return;
+        string highlighted = content[start..end];
+        Console.SetCursorPosition(column, row);
+        Console.ForegroundColor = ConsoleColor.Black;
+        Console.BackgroundColor = ConsoleColor.Gray;
+        Console.Write(highlighted);
+        Console.ResetColor();
+    }
     public string? Prompt(string label)
     {
         int row = Height - 1; WriteRow(row, "", ConsoleColor.Gray);

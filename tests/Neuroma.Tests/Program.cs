@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using Neuroma.Epub;
 using Neuroma.Storage;
+using Neuroma.Speech;
 using Neuroma.Terminal;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -40,6 +41,12 @@ internal static class Program
             store.Save(epubPath, new(1, 0.5, DateTimeOffset.UtcNow));
             ReadingPosition restored = new ProgressStore(progressPath).Get(epubPath);
             Assert(restored.Chapter == 1 && Math.Abs(restored.Fraction - 0.5) < 0.001, "persists reading position");
+            SpeechSettings speech = SpeechSettings.Load([
+                "--kokoro-url", "http://localhost:9999/", "--voice=af_test", "--speed", "1.5", epubPath
+            ], out HashSet<int> consumed);
+            Assert(speech.KokoroUrl == "http://localhost:9999" && speech.Voice == "af_test" &&
+                Math.Abs(speech.Speed - 1.5) < 0.001, "loads Kokoro command-line settings");
+            Assert(consumed.SetEquals([0, 1, 2, 3, 4]), "keeps the EPUB path separate from speech options");
             Console.WriteLine("All Neuroma tests passed."); return 0;
         }
         finally { Directory.Delete(directory, recursive: true); }

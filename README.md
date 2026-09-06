@@ -10,6 +10,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 - Chapter/page navigation and whole-book search
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
+- Kokoro read-aloud from the current page with timed word highlighting
 - Helpful malformed-file and DRM errors
 - Embedded Neuroma application icon for Windows shortcuts and file associations
 - No runtime package dependencies
@@ -31,6 +32,7 @@ with** list for `.epub` files. This is per-user and needs no administrator acces
 | `g` / `G` | Chapter start / end |
 | `t` | Table of contents |
 | `/`, then `n` / `N` | Search; next / previous result |
+| `s` | Start or stop Kokoro narration |
 | `i` / `?` | Book information / help |
 | `F11` | Maximize or restore the terminal window |
 | `q`, Escape | Quit |
@@ -40,6 +42,29 @@ bars. Windows Terminal can also enter its native fullscreen mode with `F11` or
 `Alt+Enter`, depending on its configured shortcuts.
 
 Use `Neuroma --plain book.epub` for non-interactive output.
+
+## Read aloud with Kokoro
+
+Press `s` to read from the first visible line through the rest of the book, and
+press `s` again to stop. Neuroma uses Kokoro's captioned-speech endpoint when it
+is available, highlighting each spoken word and following narration into the
+next chapter. It automatically falls back to `/v1/audio/speech` with estimated
+word timing on older Kokoro servers.
+
+Copy `neuroma.example.json` to `neuroma.json` beside `Neuroma.exe` (or keep it
+in the working directory) and set the same endpoint, voice, and speed used by
+NeuroMD:
+
+```json
+{
+  "kokoroUrl": "http://127.0.0.1:8880",
+  "voice": "af_bella",
+  "speed": 1.0
+}
+```
+
+You can override these per launch with `--kokoro-url URL`, `--voice NAME`, and
+`--speed RATE`. The supported speed range is `0.25` to `4`.
 
 ## Build
 

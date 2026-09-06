@@ -10,3 +10,4 @@ dist/
 *.reg
 NeuroMD*
 Register-NeuroMD.*
+neuroma.json

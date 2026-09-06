@@ -22,3 +22,8 @@ try {
     Copy-Item -LiteralPath $builtExecutable -Destination $nextExecutable -Force
     Write-Warning 'Neuroma.exe is running, so the update was saved as dist\Neuroma.next.exe.'
 }
+$localConfig = Join-Path $PSScriptRoot 'neuroma.json'
+if (Test-Path -LiteralPath $localConfig) {
+    Copy-Item -LiteralPath $localConfig -Destination (Join-Path $PSScriptRoot 'dist\neuroma.json') -Force
+    Write-Host 'Copied local Kokoro settings to dist\neuroma.json'
+}

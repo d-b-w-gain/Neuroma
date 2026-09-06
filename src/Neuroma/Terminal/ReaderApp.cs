@@ -1,4 +1,5 @@
 using Neuroma.Epub;
+using Neuroma.Speech;
 using Neuroma.Storage;
 using SixLabors.ImageSharp;
 
@@ -7,12 +8,17 @@ namespace Neuroma.Terminal;
 public sealed class ReaderApp
 {
     private readonly EpubBook _book; private readonly ProgressStore _progressStore; private readonly TerminalScreen _screen = new();
+    private readonly KokoroNarrator _narrator;
     private int _chapterIndex, _offset, _lastWidth; private IReadOnlyList<DisplayLine> _wrappedLines = []; private string? _searchQuery;
+    private int _drawRequested = 1;
+    private SpeechCue? _appliedCue;
     private int BodyHeight => Math.Max(1, _screen.Height - 2);
 
-    public ReaderApp(EpubBook book, ProgressStore progressStore)
+    public ReaderApp(EpubBook book, ProgressStore progressStore, SpeechSettings speechSettings)
     {
-        _book = book; _progressStore = progressStore; ReadingPosition saved = progressStore.Get(book.FilePath);
+        _book = book; _progressStore = progressStore; _narrator = new KokoroNarrator(speechSettings);
+        _narrator.Changed += RequestDraw;
+        ReadingPosition saved = progressStore.Get(book.FilePath);
         _chapterIndex = Math.Clamp(saved.Chapter, 0, book.ChapterCount - 1); Rewrap();
         _offset = (int)Math.Round(saved.Fraction * Math.Max(0, _wrappedLines.Count - BodyHeight));
     }
@@ -25,12 +31,31 @@ public sealed class ReaderApp
             bool running = true;
             while (running)
             {
-                if (_screen.Width != _lastWidth) Rewrap(); ClampOffset(); Draw();
-                running = HandleKey(Console.ReadKey(intercept: true));
+                if (_screen.Width != _lastWidth)
+                {
+                    if (_narrator.IsRunning) _narrator.Stop("KOKORO · STOPPED AFTER RESIZE");
+                    Rewrap(); RequestDraw();
+                }
+                ApplyNarrationCue();
+                ClampOffset();
+                if (Interlocked.Exchange(ref _drawRequested, 0) != 0) Draw();
+                if (Console.KeyAvailable)
+                {
+                    running = HandleKey(Console.ReadKey(intercept: true));
+                    RequestDraw();
+                }
+                else Thread.Sleep(25);
             }
         }
-        finally { SaveProgress(); _screen.Dispose(); }
+        finally
+        {
+            _narrator.Stop();
+            _narrator.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            SaveProgress(); _screen.Dispose();
+        }
     }
+
+    private void RequestDraw() => Interlocked.Exchange(ref _drawRequested, 1);
 
     private bool HandleKey(ConsoleKeyInfo key)
     {
@@ -46,12 +71,13 @@ public sealed class ReaderApp
             case ConsoleKey.LeftArrow: ChangeChapter(-1); break;
             case ConsoleKey.Home: _offset = 0; break;
             case ConsoleKey.End: _offset = Math.Max(0, _wrappedLines.Count - BodyHeight); break;
-            case ConsoleKey.T: ShowTableOfContents(); break;
+            case ConsoleKey.T: StopNarrationForModal(); ShowTableOfContents(); break;
             case ConsoleKey.F11: _screen.ToggleMaximize(); break;
-            case ConsoleKey.Oem2 when key.KeyChar == '/': StartSearch(); break;
+            case ConsoleKey.S when key.KeyChar == 's': ToggleNarration(); break;
+            case ConsoleKey.Oem2 when key.KeyChar == '/': StopNarrationForModal(); StartSearch(); break;
             case ConsoleKey.N: FindMatch(key.Modifiers.HasFlag(ConsoleModifiers.Shift)); break;
-            case ConsoleKey.I: ShowInfo(); break;
-            case ConsoleKey.Oem2 when key.KeyChar == '?': ShowHelp(); break;
+            case ConsoleKey.I: StopNarrationForModal(); ShowInfo(); break;
+            case ConsoleKey.Oem2 when key.KeyChar == '?': StopNarrationForModal(); ShowHelp(); break;
             default:
                 if (key.KeyChar is 'j' or 'J') Scroll(1);
                 else if (key.KeyChar is 'k' or 'K') Scroll(-1);
@@ -74,7 +100,98 @@ public sealed class ReaderApp
     private void ChangeChapter(int delta)
     {
         int next = Math.Clamp(_chapterIndex + delta, 0, _book.ChapterCount - 1); if (next == _chapterIndex) return;
+        if (_narrator.IsRunning) _narrator.Stop("KOKORO · STOPPED AFTER NAVIGATION");
         SaveProgress(); _chapterIndex = next; _offset = 0; Rewrap();
+    }
+
+    private void StopNarrationForModal()
+    {
+        if (_narrator.IsRunning) _narrator.Stop("KOKORO · STOPPED");
+    }
+
+    private void ToggleNarration()
+    {
+        if (_narrator.IsRunning)
+        {
+            _narrator.Stop("KOKORO · STOPPED");
+            return;
+        }
+
+        _appliedCue = null;
+        _narrator.Start(BuildSpeechChunks());
+    }
+
+    private IReadOnlyList<SpeechChunk> BuildSpeechChunks()
+    {
+        const int maximumCharacters = 700;
+        var chunks = new List<SpeechChunk>();
+        var text = new System.Text.StringBuilder();
+        var spans = new List<SpeechSpan>();
+        int width = Math.Max(20, Math.Min(100, _screen.Width - 4));
+
+        void Flush()
+        {
+            if (text.Length == 0) return;
+            chunks.Add(new SpeechChunk(text.ToString(), spans.ToArray()));
+            text.Clear(); spans.Clear();
+        }
+
+        for (int chapterIndex = _chapterIndex; chapterIndex < _book.ChapterCount; chapterIndex++)
+        {
+            IReadOnlyList<DisplayLine> lines = chapterIndex == _chapterIndex
+                ? _wrappedLines
+                : BuildDisplayLines(_book.GetChapter(chapterIndex), width, renderImages: true);
+            int firstLine = chapterIndex == _chapterIndex ? _offset : 0;
+            for (int lineIndex = firstLine; lineIndex < lines.Count; lineIndex++)
+            {
+                if (!TryGetSpokenText(lines[lineIndex], out string spoken, out int visibleStart)) continue;
+                int separatorLength = text.Length == 0 ? 0 : 1;
+                if (text.Length + separatorLength + spoken.Length > maximumCharacters) Flush();
+                if (text.Length > 0) text.Append(' ');
+                int textStart = text.Length;
+                text.Append(spoken);
+                spans.Add(new SpeechSpan(textStart, text.Length, chapterIndex, lineIndex, visibleStart));
+            }
+            Flush();
+        }
+        return chunks;
+    }
+
+    private static bool TryGetSpokenText(DisplayLine line, out string spoken, out int visibleStart)
+    {
+        spoken = ""; visibleStart = 0;
+        if (line.IsImage || string.IsNullOrWhiteSpace(line.Content) || line.Content.StartsWith("[Image:", StringComparison.Ordinal))
+            return false;
+
+        string content = line.Content;
+        int start = 0;
+        while (start < content.Length && char.IsWhiteSpace(content[start])) start++;
+        while (start < content.Length && content[start] is '#' or '•' or '│' or '─' or '>') start++;
+        while (start < content.Length && char.IsWhiteSpace(content[start])) start++;
+        int end = content.Length;
+        while (end > start && char.IsWhiteSpace(content[end - 1])) end--;
+        if (end <= start || !content[start..end].Any(char.IsLetterOrDigit)) return false;
+        spoken = content[start..end]; visibleStart = start;
+        return true;
+    }
+
+    private void ApplyNarrationCue()
+    {
+        SpeechCue? cue = _narrator.CurrentCue;
+        if (Equals(cue, _appliedCue)) return;
+        _appliedCue = cue;
+        if (cue is null) return;
+
+        if (cue.ChapterIndex != _chapterIndex)
+        {
+            SaveProgress();
+            _chapterIndex = cue.ChapterIndex;
+            _offset = 0;
+            Rewrap();
+        }
+        if (cue.LineIndex < _offset || cue.LineIndex >= _offset + BodyHeight)
+            _offset = Math.Clamp(cue.LineIndex - BodyHeight / 3, 0, Math.Max(0, _wrappedLines.Count - BodyHeight));
+        RequestDraw();
     }
     private void Rewrap()
     {
@@ -126,12 +243,16 @@ public sealed class ReaderApp
         {
             int index = _offset + row; DisplayLine line = index < _wrappedLines.Count ? _wrappedLines[index] : new DisplayLine("");
             if (line.IsImage) _screen.WriteImageRow(row + 1, left, line.Content);
+            else if (_narrator.CurrentCue is SpeechCue cue && cue.ChapterIndex == _chapterIndex && cue.LineIndex == index)
+                _screen.WriteHighlightedRow(row + 1, margin, line.Content, cue.ColumnStart, cue.ColumnEnd, ColorFor(line.Content));
             else _screen.WriteRow(row + 1, margin + line.Content, ColorFor(line.Content));
         }
         int max = Math.Max(1, _wrappedLines.Count - BodyHeight); double chapterProgress = Math.Clamp((double)_offset / max, 0, 1);
         double bookProgress = (_chapterIndex + chapterProgress) / _book.ChapterCount;
         string search = string.IsNullOrEmpty(_searchQuery) ? "" : $"  /{_searchQuery}";
-        _screen.WriteRow(_screen.Height - 1, $" ─ {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  F11 maximize  q quit{search}",
+        string speech = _narrator.IsRunning || !_narrator.Status.EndsWith("READY", StringComparison.Ordinal)
+            ? $"  {_narrator.Status}" : "";
+        _screen.WriteRow(_screen.Height - 1, $" ─ {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  s speak  q quit{search}{speech}",
             ConsoleColor.DarkGray);
     }
     private static ConsoleColor ColorFor(string line)
@@ -210,8 +331,9 @@ public sealed class ReaderApp
         "j / ↓        Scroll down one line", "k / ↑        Scroll up one line", "Space / PgDn Next page",
         "PgUp          Previous page", "h / ←         Previous chapter", "l / →         Next chapter",
         "g / G         Chapter start / end", "t             Table of contents", "/             Search the whole book",
-        "n / N         Next / previous result", "i             Book information", "F11           Maximize / restore window",
-        "q / Esc       Quit", "", "Press any key to return."]);
+        "n / N         Next / previous result", "s             Read aloud / stop (Kokoro)",
+        "i             Book information", "F11           Maximize / restore window", "q / Esc       Quit", "",
+        "Speech config: neuroma.json beside Neuroma.exe", "Overrides: --kokoro-url, --voice, --speed", "", "Press any key to return."]);
     private void ShowInfo() => ShowOverlay("Book information", [
         $"Title:      {_book.Metadata.Title}", $"Author:     {Fallback(_book.Metadata.Creator)}",
         $"Language:   {Fallback(_book.Metadata.Language)}", $"Identifier: {Fallback(_book.Metadata.Identifier)}",
