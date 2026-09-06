@@ -5,7 +5,8 @@ public sealed record SpeechSpan(
     int TextEnd,
     int ChapterIndex,
     int LineIndex,
-    int VisibleStart);
+    int VisibleStart,
+    IReadOnlyList<int>? ColumnMap = null);
 
 public sealed record SpeechChunk(string Text, IReadOnlyList<SpeechSpan> Spans);
 
@@ -20,4 +21,3 @@ public sealed record SpeechCue(
 
 internal sealed record SpeechTimestamp(string Word, double StartTime, double EndTime);
 internal sealed record SpeechResult(byte[] Audio, IReadOnlyList<SpeechTimestamp> Timestamps, bool Exact);
-

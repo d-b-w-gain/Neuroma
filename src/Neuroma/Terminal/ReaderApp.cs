@@ -144,24 +144,33 @@ public sealed class ReaderApp
             int firstLine = chapterIndex == _chapterIndex ? _offset : 0;
             for (int lineIndex = firstLine; lineIndex < lines.Count; lineIndex++)
             {
-                if (!TryGetSpokenText(lines[lineIndex], out string spoken, out int visibleStart)) continue;
+                if (!TryGetSpokenText(lines[lineIndex], out string spoken, out int visibleStart,
+                    out IReadOnlyList<int>? columnMap)) continue;
                 int separatorLength = text.Length == 0 ? 0 : 1;
                 if (text.Length + separatorLength + spoken.Length > maximumCharacters) Flush();
                 if (text.Length > 0) text.Append(' ');
                 int textStart = text.Length;
                 text.Append(spoken);
-                spans.Add(new SpeechSpan(textStart, text.Length, chapterIndex, lineIndex, visibleStart));
+                spans.Add(new SpeechSpan(textStart, text.Length, chapterIndex, lineIndex, visibleStart, columnMap));
             }
             Flush();
         }
         return chunks;
     }
 
-    private static bool TryGetSpokenText(DisplayLine line, out string spoken, out int visibleStart)
+    private static bool TryGetSpokenText(DisplayLine line, out string spoken, out int visibleStart,
+        out IReadOnlyList<int>? columnMap)
     {
-        spoken = ""; visibleStart = 0;
+        spoken = ""; visibleStart = 0; columnMap = null;
         if (line.IsImage || string.IsNullOrWhiteSpace(line.Content) || line.Content.StartsWith("[Image:", StringComparison.Ordinal))
             return false;
+
+        if (line.SpokenText is not null)
+        {
+            spoken = line.SpokenText;
+            columnMap = line.SpokenColumnMap;
+            return spoken.Any(char.IsLetterOrDigit);
+        }
 
         string content = line.Content;
         int start = 0;
@@ -207,6 +216,11 @@ public sealed class ReaderApp
             if (element is EpubText text)
             {
                 result.AddRange(TextWrapper.Wrap([text.Text], width).Select(line => new DisplayLine(line)));
+                continue;
+            }
+            if (element is EpubDropCap dropCap)
+            {
+                result.AddRange(TerminalDropCapRenderer.Render(dropCap, width));
                 continue;
             }
             if (element is not EpubImage image) continue;

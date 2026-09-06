@@ -3,12 +3,17 @@ namespace Neuroma.Epub;
 public sealed record EpubMetadata(string Title, string Creator, string Language, string Identifier);
 public abstract record EpubElement;
 public sealed record EpubText(string Text) : EpubElement;
+public sealed record EpubDropCap(string Prefix, char Initial, string Remainder) : EpubElement
+{
+    public string Text => $"{Prefix}{Initial}{Remainder}";
+}
 public sealed record EpubImage(string EntryPath, string AltText) : EpubElement;
 public sealed record EpubChapter(string Title, string EntryPath, IReadOnlyList<EpubElement> Elements)
 {
     public IReadOnlyList<string> Lines => Elements.Select(element => element switch
     {
         EpubText text => text.Text,
+        EpubDropCap dropCap => dropCap.Text,
         EpubImage image => $"[Image: {image.AltText}]",
         _ => ""
     }).ToList();

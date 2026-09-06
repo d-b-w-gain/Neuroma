@@ -276,8 +276,14 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
             int matchEnd = matchStart + matchLength; searchFrom = matchEnd;
             SpeechSpan? span = chunk.Spans.FirstOrDefault(candidate => matchStart >= candidate.TextStart && matchStart < candidate.TextEnd);
             if (span is null || matchEnd > span.TextEnd) continue;
+            int relativeStart = matchStart - span.TextStart;
+            int relativeEnd = matchEnd - span.TextStart;
+            int columnStart = span.ColumnMap is { } map && relativeStart < map.Count
+                ? map[relativeStart] : span.VisibleStart + relativeStart;
+            int columnEnd = span.ColumnMap is { } endMap && relativeEnd < endMap.Count
+                ? endMap[relativeEnd] : span.VisibleStart + relativeEnd;
             cues.Add(new SpeechCue(word, timestamp.StartTime, timestamp.EndTime, span.ChapterIndex, span.LineIndex,
-                span.VisibleStart + matchStart - span.TextStart, span.VisibleStart + matchEnd - span.TextStart));
+                columnStart, columnEnd));
         }
         return cues;
     }

@@ -78,6 +78,10 @@ public static partial class HtmlTextRenderer
                 foreach (string line in element.Value.Replace("\r", "").Split('\n')) output.Add(new EpubText($"    {line.TrimEnd()}"));
                 Blank(output);
             }
+            else if (name == "p" && TryCreateDropCap(element, out EpubDropCap? dropCap) && dropCap is not null)
+            {
+                Flush(output, inline); output.Add(dropCap); Blank(output);
+            }
             else if (Blocks.Contains(name))
             {
                 Flush(output, inline); RenderChildren(element, documentPath, output, inline, listDepth);
@@ -127,9 +131,42 @@ public static partial class HtmlTextRenderer
 
     private static void Append(StringBuilder builder, string value)
     {
-        string text = Normalize(value); if (text.Length == 0) return;
-        if (builder.Length > 0 && !char.IsWhiteSpace(builder[^1]) && !char.IsPunctuation(text[0])) builder.Append(' ');
+        bool leadingSpace = value.Length > 0 && char.IsWhiteSpace(value[0]);
+        bool trailingSpace = value.Length > 0 && char.IsWhiteSpace(value[^1]);
+        string text = Normalize(value);
+        if (text.Length == 0)
+        {
+            if ((leadingSpace || trailingSpace) && builder.Length > 0 && !char.IsWhiteSpace(builder[^1])) builder.Append(' ');
+            return;
+        }
+        if (leadingSpace && builder.Length > 0 && !char.IsWhiteSpace(builder[^1])) builder.Append(' ');
         builder.Append(text);
+        if (trailingSpace) builder.Append(' ');
+    }
+
+    private static bool TryCreateDropCap(XElement paragraph, out EpubDropCap? dropCap)
+    {
+        dropCap = null;
+        XElement? smallCap = paragraph.Descendants().FirstOrDefault(element =>
+            (element.Attribute("class")?.Value ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Any(value => value.Equals("smallcap", StringComparison.OrdinalIgnoreCase) ||
+                              value.Equals("scap", StringComparison.OrdinalIgnoreCase)));
+        if (smallCap?.Parent is not XElement lead) return false;
+
+        string paragraphText = Normalize(paragraph.Value);
+        string leadText = Normalize(lead.Value);
+        if (paragraphText.Length == 0 || leadText.Length == 0 ||
+            !paragraphText.StartsWith(leadText, StringComparison.Ordinal)) return false;
+
+        int initialIndex = 0;
+        while (initialIndex < paragraphText.Length && !char.IsLetter(paragraphText[initialIndex])) initialIndex++;
+        if (initialIndex > 2 || initialIndex >= paragraphText.Length) return false;
+        string smallCapText = Normalize(smallCap.Value);
+        if (smallCapText.Length == 0 || !paragraphText.AsSpan(initialIndex + 1).StartsWith(smallCapText, StringComparison.Ordinal))
+            return false;
+
+        dropCap = new EpubDropCap(paragraphText[..initialIndex], paragraphText[initialIndex], paragraphText[(initialIndex + 1)..]);
+        return true;
     }
 
     private static void Flush(List<EpubElement> output, StringBuilder inline)

@@ -45,7 +45,11 @@ public static class TerminalImageRenderer
     }
 }
 
-internal sealed record DisplayLine(string Content, bool IsImage = false)
+internal sealed record DisplayLine(
+    string Content,
+    bool IsImage = false,
+    string? SpokenText = null,
+    IReadOnlyList<int>? SpokenColumnMap = null)
 {
-    public string SearchText => IsImage ? "" : Content;
+    public string SearchText => IsImage ? "" : SpokenText ?? Content;
 }

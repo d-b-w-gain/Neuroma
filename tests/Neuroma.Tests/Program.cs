@@ -37,6 +37,29 @@ internal static class Program
                 <image href="../images/cover.png"/></svg></body></html>
                 """, "OEBPS/text/cover.xhtml");
             Assert(svgCover.OfType<EpubImage>().Single().EntryPath == "OEBPS/images/cover.png", "reads SVG-wrapped cover images");
+            IReadOnlyList<EpubElement> styledOpening = HtmlTextRenderer.Render("""
+                <html xmlns="http://www.w3.org/1999/xhtml"><body>
+                <p class="para-flush"><span class="sans">M<span class="smallcap">OLLY FISHED THE</span></span> key out.</p>
+                <p><span>cyber</span><i>space</i> cowboy</p>
+                <p><span>Hello</span> <i>styled</i> world</p>
+                <p class="para-flush"><span class="sans">“C<span class="SCAP">HRIST ON A</span></span> crutch.”</p>
+                </body></html>
+                """, "OEBPS/text/chapter.xhtml");
+            EpubDropCap molly = styledOpening.OfType<EpubDropCap>().First();
+            Assert(molly.Prefix == "" && molly.Initial == 'M' && molly.Remainder == "OLLY FISHED THE key out.",
+                "recognizes a small-cap opening as a drop cap without splitting its first word");
+            IReadOnlyList<DisplayLine> dropCapRows = TerminalDropCapRenderer.Render(molly, 40);
+            Assert(dropCapRows.Count >= 2 && dropCapRows[0].Content.Contains("OLLY FISHED", StringComparison.Ordinal),
+                "renders the opening initial as a two-row terminal glyph");
+            Assert(dropCapRows[0].SearchText.StartsWith("MOLLY FISHED", StringComparison.Ordinal),
+                "keeps searchable and spoken drop-cap text intact");
+            Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "cyberspace cowboy"),
+                "preserves real whitespace across inline XHTML styling");
+            Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "Hello styled world"),
+                "preserves whitespace-only nodes between inline elements");
+            EpubDropCap quoted = styledOpening.OfType<EpubDropCap>().Last();
+            Assert(quoted.Prefix == "“" && quoted.Initial == 'C' && quoted.Text == "“CHRIST ON A crutch.”",
+                "keeps opening punctuation attached to a drop cap");
             string progressPath = Path.Combine(directory, "progress.json"); var store = new ProgressStore(progressPath);
             store.Save(epubPath, new(1, 0.5, DateTimeOffset.UtcNow));
             ReadingPosition restored = new ProgressStore(progressPath).Get(epubPath);
