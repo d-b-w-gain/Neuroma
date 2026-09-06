@@ -21,6 +21,15 @@ internal sealed class TerminalScreen : IDisposable
         Console.SetCursorPosition(0, row); Console.ForegroundColor = foreground; Console.BackgroundColor = background;
         Console.Write(TextWrapper.Fit(text, Width)); Console.ResetColor();
     }
+
+    public void WriteImageRow(int row, int left, string ansiContent)
+    {
+        if (row < 0 || row >= Height) return;
+        WriteRow(row, "", ConsoleColor.Gray);
+        Console.SetCursorPosition(Math.Clamp(left, 0, Width - 1), row);
+        Console.Write(ansiContent);
+        Console.Write("\x1b[0m");
+    }
     public string? Prompt(string label)
     {
         int row = Height - 1; WriteRow(row, "", ConsoleColor.Gray);

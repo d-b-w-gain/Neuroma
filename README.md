@@ -6,7 +6,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 ## Features
 
 - EPUB 2 and EPUB 3 reading order and table of contents
-- Reflowing XHTML terminal rendering: headings, paragraphs, lists, quotes, and code
+- Reflowing XHTML terminal rendering: headings, paragraphs, lists, quotes, code, and images
 - Chapter/page navigation and whole-book search
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
@@ -52,6 +52,10 @@ Install the .NET 8 SDK, then run:
 The script runs the dependency-free test harness and publishes a self-contained,
 single-file Windows x64 executable to `dist\Neuroma.exe`.
 
-Neuroma supports standard reflowable EPUB 2/3. Fixed-layout pages and complex
-tables become readable text; images appear as descriptive placeholders. DRM is
-intentionally unsupported.
+Neuroma supports standard reflowable EPUB 2/3. PNG, JPEG, GIF, BMP, and WebP
+illustrations are resized to the available page and rendered as true-colour
+terminal cells. Unsupported images retain a descriptive text fallback. Fixed-layout
+pages and complex tables become readable text. DRM is intentionally unsupported.
+
+Image decoding and terminal-cell rendering use
+[Spectre.Console.ImageSharp](https://spectreconsole.net/console/widgets/canvas-image/).

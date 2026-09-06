@@ -66,6 +66,9 @@ public static class EpubLoader
         return string.Join('/', parts);
     }
 
+    internal static string ResolveResourcePath(string documentPath, string href) =>
+        ResolveArchivePath(ArchiveDirectory(documentPath), StripFragment(href));
+
     private static EpubMetadata ParseMetadata(XDocument package)
     {
         XElement? metadata = package.Descendants().FirstOrDefault(e => e.Name.LocalName == "metadata");
@@ -228,4 +231,3 @@ public static class EpubLoader
     }
     private static string CleanWhitespace(string value) => string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
-

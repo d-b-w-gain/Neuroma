@@ -1,12 +1,13 @@
 using Neuroma.Epub;
 using Neuroma.Storage;
+using SixLabors.ImageSharp;
 
 namespace Neuroma.Terminal;
 
 public sealed class ReaderApp
 {
     private readonly EpubBook _book; private readonly ProgressStore _progressStore; private readonly TerminalScreen _screen = new();
-    private int _chapterIndex, _offset, _lastWidth; private IReadOnlyList<string> _wrappedLines = []; private string? _searchQuery;
+    private int _chapterIndex, _offset, _lastWidth; private IReadOnlyList<DisplayLine> _wrappedLines = []; private string? _searchQuery;
     private int BodyHeight => Math.Max(1, _screen.Height - 2);
 
     public ReaderApp(EpubBook book, ProgressStore progressStore)
@@ -78,7 +79,39 @@ public sealed class ReaderApp
     private void Rewrap()
     {
         _lastWidth = _screen.Width; int width = Math.Max(20, Math.Min(100, _screen.Width - 4));
-        _wrappedLines = TextWrapper.Wrap(_book.GetChapter(_chapterIndex).Lines, width); ClampOffset();
+        _wrappedLines = BuildDisplayLines(_book.GetChapter(_chapterIndex), width, renderImages: true); ClampOffset();
+    }
+
+    private IReadOnlyList<DisplayLine> BuildDisplayLines(EpubChapter chapter, int width, bool renderImages)
+    {
+        var result = new List<DisplayLine>();
+        foreach (EpubElement element in chapter.Elements)
+        {
+            if (element is EpubText text)
+            {
+                result.AddRange(TextWrapper.Wrap([text.Text], width).Select(line => new DisplayLine(line)));
+                continue;
+            }
+            if (element is not EpubImage image) continue;
+
+            try
+            {
+                byte[]? data = renderImages && image.EntryPath.Length > 0 ? _book.ReadResource(image.EntryPath) : null;
+                if (data is null)
+                {
+                    result.Add(new DisplayLine($"[Image: {image.AltText}]"));
+                    continue;
+                }
+                result.AddRange(TerminalImageRenderer.Render(data, width, Math.Max(1, BodyHeight - 1))
+                    .Select(line => new DisplayLine(line, IsImage: true)));
+            }
+            catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException or
+                                       NotSupportedException or InvalidDataException or IOException or ArgumentException)
+            {
+                result.Add(new DisplayLine($"[Image: {image.AltText} — unsupported format]"));
+            }
+        }
+        return result.Count == 0 ? [new DisplayLine("(This chapter contains no displayable content.)")] : result;
     }
     private void ClampOffset() => _offset = Math.Clamp(_offset, 0, Math.Max(0, _wrappedLines.Count - BodyHeight));
 
@@ -91,8 +124,9 @@ public sealed class ReaderApp
         string margin = new(' ', left);
         for (int row = 0; row < BodyHeight; row++)
         {
-            int index = _offset + row; string line = index < _wrappedLines.Count ? _wrappedLines[index] : "";
-            _screen.WriteRow(row + 1, margin + line, ColorFor(line));
+            int index = _offset + row; DisplayLine line = index < _wrappedLines.Count ? _wrappedLines[index] : new DisplayLine("");
+            if (line.IsImage) _screen.WriteImageRow(row + 1, left, line.Content);
+            else _screen.WriteRow(row + 1, margin + line.Content, ColorFor(line.Content));
         }
         int max = Math.Max(1, _wrappedLines.Count - BodyHeight); double chapterProgress = Math.Clamp((double)_offset / max, 0, 1);
         double bookProgress = (_chapterIndex + chapterProgress) / _book.ChapterCount;
@@ -122,8 +156,8 @@ public sealed class ReaderApp
         int direction = reverse ? -1 : 1, chapter = _chapterIndex, start = includeCurrent ? _offset : _offset + direction;
         for (int visited = 0; visited < _book.ChapterCount; visited++)
         {
-            IReadOnlyList<string> lines = chapter == _chapterIndex ? _wrappedLines :
-                TextWrapper.Wrap(_book.GetChapter(chapter).Lines, Math.Max(20, Math.Min(100, _screen.Width - 4)));
+            IReadOnlyList<DisplayLine> lines = chapter == _chapterIndex ? _wrappedLines :
+                BuildDisplayLines(_book.GetChapter(chapter), Math.Max(20, Math.Min(100, _screen.Width - 4)), renderImages: false);
             int found = FindInLines(lines, _searchQuery, start, reverse);
             if (found >= 0)
             {
@@ -134,14 +168,14 @@ public sealed class ReaderApp
         }
         FlashMessage($"No match for '{_searchQuery}'.");
     }
-    private static int FindInLines(IReadOnlyList<string> lines, string query, int start, bool reverse)
+    private static int FindInLines(IReadOnlyList<DisplayLine> lines, string query, int start, bool reverse)
     {
         if (reverse)
             for (int i = Math.Min(start, lines.Count - 1); i >= 0; i--)
-            { if (lines[i].Contains(query, StringComparison.CurrentCultureIgnoreCase)) return i; }
+            { if (lines[i].SearchText.Contains(query, StringComparison.CurrentCultureIgnoreCase)) return i; }
         else
             for (int i = Math.Max(0, start); i < lines.Count; i++)
-            { if (lines[i].Contains(query, StringComparison.CurrentCultureIgnoreCase)) return i; }
+            { if (lines[i].SearchText.Contains(query, StringComparison.CurrentCultureIgnoreCase)) return i; }
         return -1;
     }
 

@@ -11,7 +11,7 @@ public static class Program
     {
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Any(a => a is "--help" or "-h")) { PrintHelp(); return 0; }
-        if (args.Any(a => a is "--version" or "-v")) { Console.WriteLine("Neuroma 0.1.2"); return 0; }
+        if (args.Any(a => a is "--version" or "-v")) { Console.WriteLine("Neuroma 0.2.0"); return 0; }
 
         bool plain = args.Any(a => a == "--plain") || Console.IsOutputRedirected;
         string? path = args.FirstOrDefault(a => !a.StartsWith('-'));

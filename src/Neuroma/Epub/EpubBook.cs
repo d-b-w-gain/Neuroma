@@ -35,9 +35,19 @@ public sealed class EpubBook : IDisposable
         using Stream stream = entry.Open();
         using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
         string xhtml = reader.ReadToEnd();
-        IReadOnlyList<string> lines = HtmlTextRenderer.Render(xhtml);
+        IReadOnlyList<EpubElement> elements = HtmlTextRenderer.Render(xhtml, descriptor.EntryPath);
         string title = descriptor.Label ?? HtmlTextRenderer.ExtractTitle(xhtml) ?? $"Chapter {index + 1}";
-        return _cache[index] = new EpubChapter(title, descriptor.EntryPath, lines);
+        return _cache[index] = new EpubChapter(title, descriptor.EntryPath, elements);
+    }
+
+    public byte[]? ReadResource(string entryPath)
+    {
+        ZipArchiveEntry? entry = EpubLoader.FindEntry(_archive, entryPath);
+        if (entry is null) return null;
+        using Stream stream = entry.Open();
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
     }
 
     public void Dispose() { _archive.Dispose(); _stream.Dispose(); }
