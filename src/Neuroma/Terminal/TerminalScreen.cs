@@ -23,10 +23,18 @@ internal sealed class TerminalScreen : IDisposable
     }
     public string? Prompt(string label)
     {
-        int row = Height - 1; WriteRow(row, "", ConsoleColor.White, ConsoleColor.DarkBlue);
-        Console.SetCursorPosition(0, row); Console.ForegroundColor = ConsoleColor.White; Console.BackgroundColor = ConsoleColor.DarkBlue;
+        int row = Height - 1; WriteRow(row, "", ConsoleColor.Gray);
+        Console.SetCursorPosition(0, row); Console.ForegroundColor = ConsoleColor.Yellow; Console.BackgroundColor = ConsoleColor.Black;
         Console.CursorVisible = true; Console.Write(label); string? value = Console.ReadLine();
         Console.CursorVisible = false; Console.ResetColor(); return value;
+    }
+
+    public void ToggleMaximize()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        nint window = GetConsoleWindow();
+        if (window == 0) return;
+        ShowWindow(window, IsZoomed(window) ? 9 : 3);
     }
     public void Dispose()
     {
@@ -40,7 +48,9 @@ internal sealed class TerminalScreen : IDisposable
         SetConsoleMode(handle, mode | EnableVirtualTerminalProcessing);
     }
     [DllImport("kernel32.dll", SetLastError = true)] private static extern nint GetStdHandle(int nStdHandle);
+    [DllImport("kernel32.dll")] private static extern nint GetConsoleWindow();
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetConsoleMode(nint h, out uint mode);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetConsoleMode(nint h, uint mode);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(nint hWnd, int nCmdShow);
+    [DllImport("user32.dll")] private static extern bool IsZoomed(nint hWnd);
 }
-

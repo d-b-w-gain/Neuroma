@@ -46,6 +46,7 @@ public sealed class ReaderApp
             case ConsoleKey.Home: _offset = 0; break;
             case ConsoleKey.End: _offset = Math.Max(0, _wrappedLines.Count - BodyHeight); break;
             case ConsoleKey.T: ShowTableOfContents(); break;
+            case ConsoleKey.F11: _screen.ToggleMaximize(); break;
             case ConsoleKey.Oem2 when key.KeyChar == '/': StartSearch(); break;
             case ConsoleKey.N: FindMatch(key.Modifiers.HasFlag(ConsoleModifiers.Shift)); break;
             case ConsoleKey.I: ShowInfo(); break;
@@ -84,8 +85,8 @@ public sealed class ReaderApp
     private void Draw()
     {
         EpubChapter chapter = _book.GetChapter(_chapterIndex);
-        _screen.WriteRow(0, $" Neuroma  {_book.Metadata.Title}  •  {chapter.Title}  [{_chapterIndex + 1}/{_book.ChapterCount}]",
-            ConsoleColor.White, ConsoleColor.DarkBlue);
+        _screen.WriteRow(0, $" ─ Neuroma  {_book.Metadata.Title}  •  {chapter.Title}  [{_chapterIndex + 1}/{_book.ChapterCount}]",
+            ConsoleColor.Gray);
         int contentWidth = Math.Max(20, Math.Min(100, _screen.Width - 4)); int left = Math.Max(0, (_screen.Width - contentWidth) / 2);
         string margin = new(' ', left);
         for (int row = 0; row < BodyHeight; row++)
@@ -96,14 +97,14 @@ public sealed class ReaderApp
         int max = Math.Max(1, _wrappedLines.Count - BodyHeight); double chapterProgress = Math.Clamp((double)_offset / max, 0, 1);
         double bookProgress = (_chapterIndex + chapterProgress) / _book.ChapterCount;
         string search = string.IsNullOrEmpty(_searchQuery) ? "" : $"  /{_searchQuery}";
-        _screen.WriteRow(_screen.Height - 1, $" {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  ? help  q quit{search}",
-            ConsoleColor.White, ConsoleColor.DarkBlue);
+        _screen.WriteRow(_screen.Height - 1, $" ─ {bookProgress:P0}  ↑↓ scroll  ←→ chapter  t toc  / search  F11 maximize  q quit{search}",
+            ConsoleColor.DarkGray);
     }
     private static ConsoleColor ColorFor(string line)
     {
         if (line.StartsWith("# ")) return ConsoleColor.Cyan;
-        if (line.StartsWith("##")) return ConsoleColor.Green;
-        if (line.TrimStart().StartsWith("• ")) return ConsoleColor.Yellow;
+        if (line.StartsWith("##")) return ConsoleColor.DarkCyan;
+        if (line.TrimStart().StartsWith("• ")) return ConsoleColor.DarkYellow;
         if (line.StartsWith('│')) return ConsoleColor.DarkCyan;
         if (line.StartsWith("    ")) return ConsoleColor.DarkYellow;
         if (line.StartsWith('─')) return ConsoleColor.DarkGray;
@@ -152,17 +153,16 @@ public sealed class ReaderApp
         int top = Math.Max(0, selected - BodyHeight / 2);
         while (true)
         {
-            _screen.WriteRow(0, " Table of contents — ↑↓ select, Enter open, Esc close", ConsoleColor.White, ConsoleColor.DarkBlue);
+            _screen.WriteRow(0, " ─ Table of contents — ↑↓ select, Enter open, Esc close", ConsoleColor.Gray);
             for (int row = 0; row < BodyHeight; row++)
             {
                 int index = top + row;
                 if (index >= entries.Count) { _screen.WriteRow(row + 1, "", ConsoleColor.Gray); continue; }
                 TocEntry entry = entries[index]; string indent = new(' ', Math.Min(12, entry.Depth * 2));
                 string label = $"{(index == selected ? '›' : ' ')} {indent}{entry.Label}";
-                _screen.WriteRow(row + 1, label, index == selected ? ConsoleColor.Black : ConsoleColor.Gray,
-                    index == selected ? ConsoleColor.Cyan : ConsoleColor.Black);
+                _screen.WriteRow(row + 1, label, index == selected ? ConsoleColor.Cyan : ConsoleColor.Gray);
             }
-            _screen.WriteRow(_screen.Height - 1, $" {selected + 1}/{entries.Count}", ConsoleColor.White, ConsoleColor.DarkBlue);
+            _screen.WriteRow(_screen.Height - 1, $" ─ {selected + 1}/{entries.Count}", ConsoleColor.DarkGray);
             ConsoleKeyInfo key = Console.ReadKey(true); if (key.Key is ConsoleKey.Escape or ConsoleKey.Q) return;
             if (key.Key == ConsoleKey.Enter) { _chapterIndex = entries[selected].ChapterIndex; _offset = 0; Rewrap(); return; }
             int delta = key.Key switch { ConsoleKey.DownArrow or ConsoleKey.J => 1, ConsoleKey.UpArrow or ConsoleKey.K => -1,
@@ -176,19 +176,20 @@ public sealed class ReaderApp
         "j / ↓        Scroll down one line", "k / ↑        Scroll up one line", "Space / PgDn Next page",
         "PgUp          Previous page", "h / ←         Previous chapter", "l / →         Next chapter",
         "g / G         Chapter start / end", "t             Table of contents", "/             Search the whole book",
-        "n / N         Next / previous result", "i             Book information", "q / Esc       Quit", "", "Press any key to return."]);
+        "n / N         Next / previous result", "i             Book information", "F11           Maximize / restore window",
+        "q / Esc       Quit", "", "Press any key to return."]);
     private void ShowInfo() => ShowOverlay("Book information", [
         $"Title:      {_book.Metadata.Title}", $"Author:     {Fallback(_book.Metadata.Creator)}",
         $"Language:   {Fallback(_book.Metadata.Language)}", $"Identifier: {Fallback(_book.Metadata.Identifier)}",
         $"Chapters:   {_book.ChapterCount}", $"File:       {_book.FilePath}", "", "Press any key to return."]);
     private void ShowOverlay(string title, IReadOnlyList<string> lines)
     {
-        _screen.WriteRow(0, $" {title}", ConsoleColor.White, ConsoleColor.DarkBlue);
+        _screen.WriteRow(0, $" ─ {title}", ConsoleColor.Gray);
         for (int row = 0; row < BodyHeight; row++) _screen.WriteRow(row + 1, row < lines.Count ? $"  {lines[row]}" : "", ConsoleColor.Gray);
-        _screen.WriteRow(_screen.Height - 1, " Any key returns to the book", ConsoleColor.White, ConsoleColor.DarkBlue); Console.ReadKey(true);
+        _screen.WriteRow(_screen.Height - 1, " ─ Any key returns to the book", ConsoleColor.DarkGray); Console.ReadKey(true);
     }
     private void FlashMessage(string message)
-    { _screen.WriteRow(_screen.Height - 1, $" {message}  Press any key.", ConsoleColor.White, ConsoleColor.DarkRed); Console.ReadKey(true); }
+    { _screen.WriteRow(_screen.Height - 1, $" ! {message}  Press any key.", ConsoleColor.Red); Console.ReadKey(true); }
     private void SaveProgress()
     {
         double fraction = _wrappedLines.Count <= BodyHeight ? 0 : (double)_offset / (_wrappedLines.Count - BodyHeight);

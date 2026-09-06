@@ -11,7 +11,7 @@ public static class Program
     {
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Any(a => a is "--help" or "-h")) { PrintHelp(); return 0; }
-        if (args.Any(a => a is "--version" or "-v")) { Console.WriteLine("Neuroma 0.1.0"); return 0; }
+        if (args.Any(a => a is "--version" or "-v")) { Console.WriteLine("Neuroma 0.1.1"); return 0; }
 
         bool plain = args.Any(a => a == "--plain") || Console.IsOutputRedirected;
         string? path = args.FirstOrDefault(a => !a.StartsWith('-'));
@@ -63,7 +63,6 @@ public static class Program
           Neuroma --plain <book.epub>
 
         Keys: arrows or j/k scroll; Space/PgUp/PgDn page; h/l change chapter;
-              t contents; / search; n/N results; i info; ? help; q quit.
+              t contents; / search; n/N results; F11 maximize; ? help; q quit.
         """);
 }
-

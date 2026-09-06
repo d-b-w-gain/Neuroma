@@ -31,7 +31,12 @@ with** list for `.epub` files. This is per-user and needs no administrator acces
 | `t` | Table of contents |
 | `/`, then `n` / `N` | Search; next / previous result |
 | `i` / `?` | Book information / help |
+| `F11` | Maximize or restore the terminal window |
 | `q`, Escape | Quit |
+
+Neuroma uses a low-glare, black-background colour scheme with no solid colour
+bars. Windows Terminal can also enter its native fullscreen mode with `F11` or
+`Alt+Enter`, depending on its configured shortcuts.
 
 Use `Neuroma --plain book.epub` for non-interactive output.
 

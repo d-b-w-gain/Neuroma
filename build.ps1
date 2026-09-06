@@ -7,7 +7,18 @@ else {
     $dotnet = $command.Source
 }
 & $dotnet run --project tests\Neuroma.Tests\Neuroma.Tests.csproj -c Release
+$publishDirectory = Join-Path $PSScriptRoot 'dist\.publish'
 & $dotnet publish src\Neuroma\Neuroma.csproj -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -p:DebugType=None -p:DebugSymbols=false -o dist
-Write-Host 'Built dist\Neuroma.exe'
+    -p:DebugType=None -p:DebugSymbols=false -o $publishDirectory
+
+$builtExecutable = Join-Path $publishDirectory 'Neuroma.exe'
+$currentExecutable = Join-Path $PSScriptRoot 'dist\Neuroma.exe'
+try {
+    Copy-Item -LiteralPath $builtExecutable -Destination $currentExecutable -Force -ErrorAction Stop
+    Write-Host 'Built dist\Neuroma.exe'
+} catch [System.IO.IOException] {
+    $nextExecutable = Join-Path $PSScriptRoot 'dist\Neuroma.next.exe'
+    Copy-Item -LiteralPath $builtExecutable -Destination $nextExecutable -Force
+    Write-Warning 'Neuroma.exe is running, so the update was saved as dist\Neuroma.next.exe.'
+}
