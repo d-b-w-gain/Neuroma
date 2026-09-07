@@ -8,7 +8,11 @@ public sealed record SpeechSpan(
     int VisibleStart,
     IReadOnlyList<int>? ColumnMap = null);
 
-public sealed record SpeechChunk(string Text, IReadOnlyList<SpeechSpan> Spans);
+public sealed record SpeechChunk(
+    string Text,
+    IReadOnlyList<SpeechSpan> Spans,
+    int PauseBeforeMilliseconds = 0,
+    int PauseAfterMilliseconds = 0);
 
 public sealed record SpeechCue(
     string Word,

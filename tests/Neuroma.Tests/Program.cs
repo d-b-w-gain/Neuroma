@@ -61,6 +61,29 @@ internal static class Program
                 sRows[1].Content.StartsWith("▀▄▄▄ ", StringComparison.Ordinal) &&
                 sRows[2].Content.StartsWith("▄▄▄▄▀", StringComparison.Ordinal),
                 "renders S with distinct upper, middle, and lower curves");
+            string longFirstHalf = new('A', 400);
+            string longSecondHalf = new('B', 400);
+            IReadOnlyList<SpeechChunk> paragraphChunks = ReaderApp.BuildSpeechChunks([
+                new SpeechChapterLines(0, [
+                    new DisplayLine(longFirstHalf, ParagraphId: 1),
+                    new DisplayLine(longSecondHalf, ParagraphId: 1),
+                    new DisplayLine("# A New Place", ParagraphId: 2),
+                    new DisplayLine("────────", ParagraphId: 3),
+                    new DisplayLine("After the scene break.", ParagraphId: 4)
+                ], 0),
+                new SpeechChapterLines(1, [
+                    new DisplayLine("[Image: chapter ornament]", IsImage: true),
+                    new DisplayLine("# Next Chapter", ParagraphId: 0)
+                ], 0)
+            ]);
+            Assert(paragraphChunks.Count == 4 && paragraphChunks[0].Text.Length == 801,
+                "keeps long paragraphs in one audio segment instead of splitting at a character limit");
+            Assert(paragraphChunks[1].PauseAfterMilliseconds >= 800,
+                "adds a clear pause after chapter and section headings");
+            Assert(paragraphChunks[2].PauseBeforeMilliseconds >= 700,
+                "adds a clear pause around scene and structural breaks");
+            Assert(paragraphChunks[3].PauseBeforeMilliseconds >= 1000,
+                "adds a clear pause at chapter transitions");
             Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "cyberspace cowboy"),
                 "preserves real whitespace across inline XHTML styling");
             EpubText inlineStyles = styledOpening.OfType<EpubText>().Single(text => text.Text == "cyberspace cowboy");

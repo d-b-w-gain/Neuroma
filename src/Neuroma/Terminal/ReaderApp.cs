@@ -75,6 +75,7 @@ public sealed class ReaderApp
             case ConsoleKey.End: _offset = Math.Max(0, _wrappedLines.Count - BodyHeight); break;
             case ConsoleKey.T: StopNarrationForModal(); ShowTableOfContents(); break;
             case ConsoleKey.F11: _screen.ToggleMaximize(); break;
+            case ConsoleKey.S when key.KeyChar == 'S': _narrator.Stop("KOKORO · STOPPED"); break;
             case ConsoleKey.S when key.KeyChar == 's': ToggleNarration(); break;
             case ConsoleKey.C when key.KeyChar == 'c': CycleColorMode(); break;
             case ConsoleKey.Oem2 when key.KeyChar == '/': StopNarrationForModal(); StartSearch(); break;
@@ -124,9 +125,14 @@ public sealed class ReaderApp
 
     private void ToggleNarration()
     {
+        if (_narrator.IsPaused)
+        {
+            _narrator.Resume();
+            return;
+        }
         if (_narrator.IsRunning)
         {
-            _narrator.Stop("KOKORO · STOPPED");
+            _narrator.Pause();
             return;
         }
 
@@ -136,39 +142,83 @@ public sealed class ReaderApp
 
     private IReadOnlyList<SpeechChunk> BuildSpeechChunks()
     {
-        const int maximumCharacters = 700;
-        var chunks = new List<SpeechChunk>();
-        var text = new System.Text.StringBuilder();
-        var spans = new List<SpeechSpan>();
-        int width = Math.Max(20, Math.Min(100, _screen.Width - 4));
-
-        void Flush()
-        {
-            if (text.Length == 0) return;
-            chunks.Add(new SpeechChunk(text.ToString(), spans.ToArray()));
-            text.Clear(); spans.Clear();
-        }
-
+        var chapters = new List<SpeechChapterLines>();
         for (int chapterIndex = _chapterIndex; chapterIndex < _book.ChapterCount; chapterIndex++)
         {
             IReadOnlyList<DisplayLine> lines = chapterIndex == _chapterIndex
                 ? _wrappedLines
-                : BuildDisplayLines(_book.GetChapter(chapterIndex), width, renderImages: true);
-            int firstLine = chapterIndex == _chapterIndex ? _offset : 0;
-            for (int lineIndex = firstLine; lineIndex < lines.Count; lineIndex++)
+                : BuildDisplayLines(_book.GetChapter(chapterIndex), Math.Max(20, Math.Min(100, _screen.Width - 4)),
+                    renderImages: true);
+            chapters.Add(new SpeechChapterLines(chapterIndex, lines,
+                chapterIndex == _chapterIndex ? _offset : 0));
+        }
+        return BuildSpeechChunks(chapters);
+    }
+
+    internal static IReadOnlyList<SpeechChunk> BuildSpeechChunks(IReadOnlyList<SpeechChapterLines> chapters)
+    {
+        const int paragraphPause = 320;
+        const int headingPause = 850;
+        const int chapterPause = 1000;
+        const int structuralPause = 700;
+        var chunks = new List<SpeechChunk>();
+        foreach (SpeechChapterLines chapter in chapters)
+        {
+            var text = new System.Text.StringBuilder();
+            var spans = new List<SpeechSpan>();
+            int activeParagraph = int.MinValue;
+            int pauseBefore = 0;
+            int pendingPause = chapter.FirstLine == 0 ? chapterPause : 0;
+            bool heading = false;
+
+            void Flush()
             {
-                if (!TryGetSpokenText(lines[lineIndex], out string spoken, out int visibleStart,
-                    out IReadOnlyList<int>? columnMap)) continue;
-                int separatorLength = text.Length == 0 ? 0 : 1;
-                if (text.Length + separatorLength + spoken.Length > maximumCharacters) Flush();
+                if (text.Length == 0) return;
+                chunks.Add(new SpeechChunk(text.ToString(), spans.ToArray(), pauseBefore,
+                    heading ? headingPause : paragraphPause));
+                text.Clear();
+                spans.Clear();
+            }
+
+            for (int lineIndex = chapter.FirstLine; lineIndex < chapter.Lines.Count; lineIndex++)
+            {
+                DisplayLine line = chapter.Lines[lineIndex];
+                if (line.ParagraphId != activeParagraph)
+                {
+                    Flush();
+                    activeParagraph = line.ParagraphId;
+                    heading = IsHeading(line.Content);
+                }
+                else heading |= IsHeading(line.Content);
+
+                if (!TryGetSpokenText(line, out string spoken, out int visibleStart,
+                    out IReadOnlyList<int>? columnMap))
+                {
+                    if (IsStructuralBreak(line.Content)) pendingPause = Math.Max(pendingPause, structuralPause);
+                    continue;
+                }
+                if (text.Length == 0)
+                {
+                    pauseBefore = pendingPause;
+                    pendingPause = 0;
+                }
                 if (text.Length > 0) text.Append(' ');
                 int textStart = text.Length;
                 text.Append(spoken);
-                spans.Add(new SpeechSpan(textStart, text.Length, chapterIndex, lineIndex, visibleStart, columnMap));
+                spans.Add(new SpeechSpan(textStart, text.Length, chapter.ChapterIndex, lineIndex, visibleStart, columnMap));
             }
             Flush();
         }
         return chunks;
+    }
+
+    private static bool IsHeading(string content)
+        => content.TrimStart().StartsWith('#');
+
+    private static bool IsStructuralBreak(string content)
+    {
+        string trimmed = content.Trim();
+        return trimmed.Length > 0 && !trimmed.Any(char.IsLetterOrDigit);
     }
 
     private static bool TryGetSpokenText(DisplayLine line, out string spoken, out int visibleStart,
@@ -398,7 +448,8 @@ public sealed class ReaderApp
         "j / ↓        Scroll down one line", "k / ↑        Scroll up one line", "Space / PgDn Next page",
         "PgUp          Previous page", "h / ←         Previous chapter", "l / →         Next chapter",
         "g / G         Chapter start / end", "t             Table of contents", "/             Search the whole book",
-        "n / N         Next / previous result", "s             Read aloud / stop (Kokoro)",
+        "n / N         Next / previous result", "s             Read aloud / pause / resume (Kokoro)",
+        "Shift+S       Stop Kokoro narration",
         "c             Cycle plain / gentle / focus colour", "i             Book information",
         "F11           Maximize / restore window", "q / Esc       Quit", "",
         "Speech config: neuroma.json beside Neuroma.exe", "Overrides: --kokoro-url, --voice, --speed", "", "Press any key to return."]);

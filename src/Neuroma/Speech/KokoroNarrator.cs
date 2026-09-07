@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -17,13 +17,18 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
     private Task? _task;
     private bool? _captionApiAvailable;
     private bool _isRunning;
+    private bool _isPaused;
     private string _status = "KOKORO · READY";
+    private string _resumeStatus = "KOKORO · READY";
     private SpeechCue? _currentCue;
+    private TaskCompletionSource<bool>? _resumeSignal;
+    private MciWavePlayer? _activePlayer;
 
     public KokoroNarrator(SpeechSettings settings) => _settings = settings;
     public event Action? Changed;
 
     public bool IsRunning { get { lock (_gate) return _isRunning; } }
+    public bool IsPaused { get { lock (_gate) return _isPaused; } }
     public string Status { get { lock (_gate) return _status; } }
     public SpeechCue? CurrentCue { get { lock (_gate) return _currentCue; } }
 
@@ -43,6 +48,8 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
             cancellation = new CancellationTokenSource();
             _cancellation = cancellation;
             _isRunning = true;
+            _isPaused = false;
+            _resumeSignal = null;
             _status = $"KOKORO · STARTING · {_settings.Voice}";
             task = RunAsync(chunks, cancellation.Token);
             _task = task;
@@ -51,15 +58,57 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         _ = ObserveAsync(task, cancellation);
     }
 
+    public void Pause()
+    {
+        MciWavePlayer? player;
+        lock (_gate)
+        {
+            if (!_isRunning || _isPaused) return;
+            _isPaused = true;
+            _resumeSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _resumeStatus = _status;
+            _status = "KOKORO · PAUSED · s TO RESUME";
+            player = _activePlayer;
+        }
+        player?.TryPause();
+        Changed?.Invoke();
+    }
+
+    public void Resume()
+    {
+        MciWavePlayer? player;
+        TaskCompletionSource<bool>? signal;
+        lock (_gate)
+        {
+            if (!_isRunning || !_isPaused) return;
+            _isPaused = false;
+            _status = _resumeStatus;
+            player = _activePlayer;
+            signal = _resumeSignal;
+            _resumeSignal = null;
+        }
+        player?.TryResume();
+        signal?.TrySetResult(true);
+        Changed?.Invoke();
+    }
+
     public void Stop(string message = "KOKORO · STOPPED")
     {
         CancellationTokenSource? cancellation;
+        TaskCompletionSource<bool>? signal;
+        MciWavePlayer? player;
         lock (_gate)
         {
             cancellation = _cancellation;
+            signal = _resumeSignal;
+            player = _activePlayer;
+            _isPaused = false;
+            _resumeSignal = null;
             _status = message;
             _currentCue = null;
         }
+        signal?.TrySetResult(true);
+        player?.TryStop();
         cancellation?.Cancel();
         Changed?.Invoke();
     }
@@ -92,6 +141,9 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
                     _isRunning = false;
                     _task = null;
                     _cancellation = null;
+                    _isPaused = false;
+                    _resumeSignal = null;
+                    _activePlayer = null;
                     _currentCue = null;
                     if (failure is not null) _status = $"KOKORO FAILED · {failure}";
                     else if (!owner.IsCancellationRequested) _status = "KOKORO · COMPLETE";
@@ -112,9 +164,11 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
             {
                 IReadOnlyList<SpeechCue> cues = BuildCues(chunk, speech.Timestamps);
                 string prefetch = hasNext ? $" · PREFETCHING {index + 2}/{chunks.Count}" : "";
+                await DelayRespectingPauseAsync(chunk.PauseBeforeMilliseconds, token).ConfigureAwait(false);
                 SetStatus($"KOKORO · PLAYING {index + 1}/{chunks.Count} · " +
-                    $"{(speech.Exact ? "EXACT" : "ESTIMATED")} TIMING{prefetch} · s TO STOP");
+                    $"{(speech.Exact ? "EXACT" : "ESTIMATED")} TIMING{prefetch} · s TO PAUSE");
                 await PlaySpeechAsync(speech.Audio, cues, token).ConfigureAwait(false);
+                await DelayRespectingPauseAsync(chunk.PauseAfterMilliseconds, token).ConfigureAwait(false);
             },
             index => SetStatus($"KOKORO · WAITING FOR BUFFER {index + 1}/{chunks.Count}"),
             cancellationToken).ConfigureAwait(false);
@@ -195,42 +249,24 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Kokoro playback currently requires Windows.");
         string audioPath = Path.Combine(Path.GetTempPath(), $"neuroma-{Guid.NewGuid():N}.wav");
+        MciWavePlayer? player = null;
         try
         {
             await File.WriteAllBytesAsync(audioPath, audio, cancellationToken).ConfigureAwait(false);
-            string escapedPath = audioPath.Replace("'", "''", StringComparison.Ordinal);
-            var startInfo = new ProcessStartInfo
+            await WaitWhilePausedAsync(cancellationToken).ConfigureAwait(false);
+            player = new MciWavePlayer(audioPath);
+            player.Play();
+            lock (_gate)
             {
-                FileName = "powershell.exe",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            startInfo.ArgumentList.Add("-NoLogo");
-            startInfo.ArgumentList.Add("-NoProfile");
-            startInfo.ArgumentList.Add("-NonInteractive");
-            startInfo.ArgumentList.Add("-WindowStyle");
-            startInfo.ArgumentList.Add("Hidden");
-            startInfo.ArgumentList.Add("-Command");
-            startInfo.ArgumentList.Add($"$p=New-Object System.Media.SoundPlayer('{escapedPath}');$p.Load();[Console]::Out.WriteLine('READY');$p.PlaySync()");
-
-            using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Windows audio player did not start");
-            using CancellationTokenRegistration registration = cancellationToken.Register(() => TryKill(process));
-            string? ready = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-            if (!string.Equals(ready, "READY", StringComparison.Ordinal))
-            {
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                string error = await process.StandardError.ReadToEndAsync(CancellationToken.None).ConfigureAwait(false);
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "Windows audio player did not start" : error.Trim());
+                _activePlayer = player;
+                if (_isPaused) player.TryPause();
             }
 
-            var stopwatch = Stopwatch.StartNew();
+            using CancellationTokenRegistration registration = cancellationToken.Register(player.TryStop);
             int activeIndex = -1;
-            while (!process.HasExited && !cancellationToken.IsCancellationRequested)
+            while (!player.HasEnded && !cancellationToken.IsCancellationRequested)
             {
-                double elapsed = stopwatch.Elapsed.TotalSeconds;
+                double elapsed = player.PositionSeconds;
                 int cueIndex = FindActiveCue(cues, elapsed);
                 if (cueIndex >= 0 && cueIndex != activeIndex)
                 {
@@ -239,16 +275,39 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
                 }
                 await Task.Delay(25, cancellationToken).ConfigureAwait(false);
             }
-            if (cancellationToken.IsCancellationRequested) TryKill(process);
-            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            string playerError = await process.StandardError.ReadToEndAsync(CancellationToken.None).ConfigureAwait(false);
-            if (!cancellationToken.IsCancellationRequested && process.ExitCode != 0)
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(playerError) ? "Windows audio playback failed" : playerError.Trim());
+            cancellationToken.ThrowIfCancellationRequested();
         }
         finally
         {
+            lock (_gate)
+                if (ReferenceEquals(_activePlayer, player)) _activePlayer = null;
+            player?.Dispose();
             SetCue(null);
             try { File.Delete(audioPath); } catch (IOException) { }
+        }
+    }
+
+    private async Task WaitWhilePausedAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            Task? resume;
+            lock (_gate) resume = _isPaused ? _resumeSignal?.Task : null;
+            if (resume is null) return;
+            await resume.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task DelayRespectingPauseAsync(int milliseconds, CancellationToken cancellationToken)
+    {
+        int remaining = Math.Max(0, milliseconds);
+        while (remaining > 0)
+        {
+            await WaitWhilePausedAsync(cancellationToken).ConfigureAwait(false);
+            int slice = Math.Min(remaining, 50);
+            await Task.Delay(slice, cancellationToken).ConfigureAwait(false);
+            lock (_gate)
+                if (!_isPaused) remaining -= slice;
         }
     }
 
@@ -338,7 +397,11 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
 
     private void SetStatus(string status)
     {
-        lock (_gate) _status = status;
+        lock (_gate)
+        {
+            if (_isPaused) _resumeStatus = status;
+            else _status = status;
+        }
         Changed?.Invoke();
     }
 
@@ -348,9 +411,81 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         Changed?.Invoke();
     }
 
-    private static void TryKill(Process process)
+    private sealed class MciWavePlayer : IDisposable
     {
-        try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+        private readonly string _alias = "neuroma" + Guid.NewGuid().ToString("N");
+        private readonly object _commandLock = new();
+        private bool _opened;
+
+        public MciWavePlayer(string path)
+        {
+            if (path.Contains('"'))
+                throw new ArgumentException("Audio path contains an unsupported quote.", nameof(path));
+            Send($"open \"{path}\" type waveaudio alias {_alias}");
+            _opened = true;
+            try { Send($"set {_alias} time format milliseconds"); }
+            catch { Dispose(); throw; }
+        }
+
+        public double PositionSeconds
+        {
+            get
+            {
+                string value = Query($"status {_alias} position");
+                return double.TryParse(value, out double milliseconds) ? milliseconds / 1000 : 0;
+            }
+        }
+
+        public bool HasEnded => string.Equals(Query($"status {_alias} mode"), "stopped", StringComparison.OrdinalIgnoreCase);
+
+        public void Play() => Send($"play {_alias}");
+        public void TryPause() => TrySend($"pause {_alias}");
+        public void TryResume() => TrySend($"resume {_alias}");
+        public void TryStop() => TrySend($"stop {_alias}");
+
+        public void Dispose()
+        {
+            lock (_commandLock)
+            {
+                if (!_opened) return;
+                MciSendString($"close {_alias}", null, 0, nint.Zero);
+                _opened = false;
+            }
+        }
+
+        private string Query(string command)
+        {
+            var result = new StringBuilder(128);
+            Send(command, result);
+            return result.ToString().Trim();
+        }
+
+        private void Send(string command, StringBuilder? result = null)
+        {
+            lock (_commandLock)
+            {
+                int code = MciSendString(command, result, result?.Capacity ?? 0, nint.Zero);
+                if (code == 0) return;
+                var message = new StringBuilder(256);
+                MciGetErrorString(code, message, message.Capacity);
+                throw new InvalidOperationException($"Windows audio playback failed: {message.ToString().Trim()}");
+            }
+        }
+
+        private void TrySend(string command)
+        {
+            lock (_commandLock)
+            {
+                if (_opened) MciSendString(command, null, 0, nint.Zero);
+            }
+        }
+
+        [DllImport("winmm.dll", CharSet = CharSet.Unicode, EntryPoint = "mciSendStringW")]
+        private static extern int MciSendString(string command, StringBuilder? result, int resultLength, nint callback);
+
+        [DllImport("winmm.dll", CharSet = CharSet.Unicode, EntryPoint = "mciGetErrorStringW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool MciGetErrorString(int errorCode, StringBuilder errorText, int errorTextSize);
     }
 
     [GeneratedRegex(@"^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$")]

@@ -13,8 +13,9 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 - Chapter/page navigation and whole-book search
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
-- Kokoro read-aloud from the current page with timed word highlighting
+- Kokoro read-aloud from the current page with timed word highlighting and pause/resume
 - One-segment Kokoro prefetching for continuous playback between sections
+- Paragraph-based narration with distinct pauses for paragraphs, headings, scene breaks, and chapter transitions
 - Helpful malformed-file and DRM errors
 - Embedded Neuroma application icon for Windows shortcuts and file associations
 - No runtime package dependencies
@@ -36,7 +37,8 @@ with** list for `.epub` files. This is per-user and needs no administrator acces
 | `g` / `G` | Chapter start / end |
 | `t` | Table of contents |
 | `/`, then `n` / `N` | Search; next / previous result |
-| `s` | Start or stop Kokoro narration |
+| `s` | Start, pause, or resume Kokoro narration |
+| `Shift+S` | Stop Kokoro narration |
 | `c` | Cycle Gentle, Focus, and Plain colour modes |
 | `i` / `?` | Book information / help |
 | `F11` | Maximize or restore the terminal window |
@@ -60,12 +62,16 @@ Use `Neuroma --plain book.epub` for non-interactive output.
 
 ## Read aloud with Kokoro
 
-Press `s` to read from the first visible line through the rest of the book, and
-press `s` again to stop. Neuroma uses Kokoro's captioned-speech endpoint when it
+Press `s` to read from the first visible line through the rest of the book. Press
+it again to pause at the current audio position, and once more to resume. Neuroma
+uses Kokoro's captioned-speech endpoint when it
 is available, highlighting each spoken word and following narration into the
 next chapter. It automatically falls back to `/v1/audio/speech` with estimated
-word timing on older Kokoro servers. While one segment plays, Neuroma generates
-and buffers the next segment and its timestamps to minimize pauses.
+word timing on older Kokoro servers. Each EPUB paragraph is one audio segment,
+so visual wrapping and character counts never split a sentence. While one
+paragraph plays, Neuroma generates and buffers the next paragraph and its
+timestamps. Short structural pauses separate paragraphs; longer pauses mark
+headings, scene breaks, and chapter transitions.
 
 Copy `neuroma.example.json` to `neuroma.json` beside `Neuroma.exe` (or keep it
 in the working directory) and set the same endpoint, voice, and speed used by

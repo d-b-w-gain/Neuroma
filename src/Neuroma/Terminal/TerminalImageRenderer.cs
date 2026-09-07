@@ -62,3 +62,8 @@ internal sealed record DisplayLine(
 {
     public string SearchText => IsImage ? "" : SpokenText ?? Content;
 }
+
+internal sealed record SpeechChapterLines(
+    int ChapterIndex,
+    IReadOnlyList<DisplayLine> Lines,
+    int FirstLine);
