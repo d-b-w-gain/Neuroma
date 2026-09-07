@@ -5,7 +5,8 @@ namespace Neuroma.Terminal;
 
 internal static class TerminalIlluminatedDropCapRenderer
 {
-    private static readonly HashSet<char> AvailableLetters = ['A', 'C', 'M', 'S'];
+    private static readonly HashSet<char> AvailableLetters =
+        Enumerable.Range('A', 26).Select(value => (char)value).ToHashSet();
     private static readonly Dictionary<char, TerminalImageBlock> Cache = [];
     private static readonly object CacheLock = new();
 

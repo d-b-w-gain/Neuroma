@@ -1,9 +1,11 @@
 # Glyph DCT preview generator
 
 This Windows-only development tool converts the illuminated PNG source assets
-to genuine colour ASCII. It rasterizes all 95 printable ASCII characters from
-the supplied monospaced font, reduces each glyph to an 8×16 coverage patch, and
-computes the complete orthonormal two-dimensional DCT.
+to genuine colour terminal glyph art. It rasterizes the supported single-cell
+characters from printable ASCII plus the Unicode arrows, technical, box-drawing,
+block, geometric, and Braille ranges in the supplied monospaced font. Missing-
+glyph fallback boxes are discarded. Every surviving glyph is reduced to an
+8×16 coverage patch and transformed with the complete orthonormal 2D DCT.
 
 Each identically sized source patch is transformed and compared with every
 glyph. For each candidate, the optimal foreground RGB value on black is solved
@@ -16,6 +18,7 @@ dotnet run --project tools\GlyphDctPreview -- `
   assets\dropcaps\celtic-a.png
 ```
 
-The source artwork currently contains a baked near-white checkerboard, so the
-generator removes that matte before matching. This preprocessing does not
-select or rank glyphs.
+The source artwork may contain a baked near-white checkerboard, so the generator
+removes that matte before matching. This preprocessing does not select or rank
+glyphs. The chosen symbol is still the direct least-error DCT match; no hand-
+authored character ramp or density guess is involved.
