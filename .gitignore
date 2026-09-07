@@ -11,3 +11,4 @@ dist/
 NeuroMD*
 Register-NeuroMD.*
 neuroma.json
+artifacts/

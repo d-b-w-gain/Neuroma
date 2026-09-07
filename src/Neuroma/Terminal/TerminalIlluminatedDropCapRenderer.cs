@@ -6,7 +6,7 @@ namespace Neuroma.Terminal;
 internal static class TerminalIlluminatedDropCapRenderer
 {
     private static readonly HashSet<char> AvailableLetters = ['A', 'C', 'M', 'S'];
-    private static readonly Dictionary<(char Letter, int Columns), TerminalImageBlock> Cache = [];
+    private static readonly Dictionary<char, TerminalImageBlock> Cache = [];
     private static readonly object CacheLock = new();
 
     public static bool TryRender(EpubDropCap dropCap, int width, int paragraphId,
@@ -19,9 +19,8 @@ internal static class TerminalIlluminatedDropCapRenderer
             return false;
         }
 
-        int requestedColumns = Math.Clamp(width / 5, 10, 16);
         TerminalImageBlock block;
-        try { block = GetBlock(letter, requestedColumns); }
+        try { block = GetBlock(letter); }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or InvalidDataException or ArgumentException)
         {
             lines = [];
@@ -83,18 +82,19 @@ internal static class TerminalIlluminatedDropCapRenderer
         return true;
     }
 
-    private static TerminalImageBlock GetBlock(char letter, int columns)
+    private static TerminalImageBlock GetBlock(char letter)
     {
         lock (CacheLock)
         {
-            if (Cache.TryGetValue((letter, columns), out TerminalImageBlock? cached)) return cached;
-            string name = $"Neuroma.DropCaps.celtic-{char.ToLowerInvariant(letter)}.png";
+            if (Cache.TryGetValue(letter, out TerminalImageBlock? cached)) return cached;
+            string name = $"Neuroma.DropCaps.Ascii.celtic-{char.ToLowerInvariant(letter)}.ans";
             using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
                 ?? throw new InvalidOperationException($"Missing illuminated initial resource {name}.");
-            using var buffer = new MemoryStream();
-            stream.CopyTo(buffer);
-            TerminalImageBlock rendered = TerminalImageRenderer.RenderBlock(buffer.ToArray(), columns, 8);
-            Cache[(letter, columns)] = rendered;
+            using var reader = new StreamReader(stream);
+            IReadOnlyList<string> rows = reader.ReadToEnd().Replace("\r\n", "\n", StringComparison.Ordinal)
+                .TrimEnd('\n').Split('\n');
+            var rendered = new TerminalImageBlock(rows, 28);
+            Cache[letter] = rendered;
             return rendered;
         }
     }

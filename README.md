@@ -7,7 +7,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 
 - EPUB 2 and EPUB 3 reading order and table of contents
 - Reflowing XHTML terminal rendering: headings, paragraphs, lists, quotes, code, and images
-- Large true-colour Celtic initials at chapter openings (A, C, M, and S), with compact drop caps elsewhere
+- Large true-colour ASCII Celtic initials at chapter openings (A, C, M, and S), with compact drop caps elsewhere
 - Gentle semantic colour for dialogue, emphasis, links, code, and quotations
 - Optional paragraph-focus colour mode with no character-attribution guesses
 - Chapter/page navigation and whole-book search
@@ -97,6 +97,10 @@ Neuroma supports standard reflowable EPUB 2/3. PNG, JPEG, GIF, BMP, and WebP
 illustrations are resized to the available page and rendered as true-colour
 terminal cells. Unsupported images retain a descriptive text fallback. Fixed-layout
 pages and complex tables become readable text. DRM is intentionally unsupported.
+
+The large opening initials are genuine printable ASCII. Every source-image patch
+is matched against all 95 Cascadia Mono ASCII glyph rasters using a complete 8×16
+two-dimensional DCT, with the foreground colour solved independently for each cell.
 
 Image decoding and terminal-cell rendering use
 [Spectre.Console.ImageSharp](https://spectreconsole.net/console/widgets/canvas-image/).

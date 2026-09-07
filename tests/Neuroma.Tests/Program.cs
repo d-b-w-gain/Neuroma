@@ -59,6 +59,9 @@ internal static class Program
                 out IReadOnlyList<DisplayLine> illuminatedRows), "loads an embedded illuminated opening initial");
             Assert(illuminatedRows.Count >= 6 && illuminatedRows.All(line => line.AnsiOverlay is not null),
                 "renders a larger multi-row Celtic initial beside the opening paragraph");
+            Assert(illuminatedRows.Count == 14 && illuminatedRows.All(line =>
+                line.AnsiOverlay is { } overlay && !overlay.Any(character => character is '█' or '▀' or '▄')),
+                "uses printable ASCII glyphs rather than terminal pixel blocks");
             Assert(string.Concat(illuminatedRows.Select(line => line.SearchText)).Contains("MOLLY", StringComparison.Ordinal),
                 "keeps illuminated opening text searchable and speakable");
             foreach (char initial in "ACMS")
