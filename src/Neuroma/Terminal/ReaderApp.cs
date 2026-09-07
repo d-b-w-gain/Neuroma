@@ -225,6 +225,7 @@ public sealed class ReaderApp
     {
         var result = new List<DisplayLine>();
         int paragraphId = 0;
+        bool illuminatedOpeningRendered = false;
         foreach (EpubElement element in chapter.Elements)
         {
             if (element is EpubText text)
@@ -236,7 +237,14 @@ public sealed class ReaderApp
             }
             if (element is EpubDropCap dropCap)
             {
-                result.AddRange(TerminalDropCapRenderer.Render(dropCap, width, paragraphId++));
+                int id = paragraphId++;
+                if (renderImages && !illuminatedOpeningRendered &&
+                    TerminalIlluminatedDropCapRenderer.TryRender(dropCap, width, id, out IReadOnlyList<DisplayLine> illuminated))
+                {
+                    result.AddRange(illuminated);
+                    illuminatedOpeningRendered = true;
+                }
+                else result.AddRange(TerminalDropCapRenderer.Render(dropCap, width, id));
                 continue;
             }
             if (element is not EpubImage image) continue;
@@ -294,6 +302,8 @@ public sealed class ReaderApp
                 int highlightEnd = highlightStart >= 0 ? currentCue!.ColumnEnd : -1;
                 _screen.WriteStyledRow(row + 1, margin, line.Content, colors, highlightStart, highlightEnd);
             }
+            if (!line.IsImage && line.AnsiOverlay is { Length: > 0 } overlay)
+                _screen.WriteAnsiOverlay(row + 1, left + line.AnsiOverlayColumn, overlay);
         }
         int max = Math.Max(1, _wrappedLines.Count - BodyHeight); double chapterProgress = Math.Clamp((double)_offset / max, 0, 1);
         double bookProgress = (_chapterIndex + chapterProgress) / _book.ChapterCount;

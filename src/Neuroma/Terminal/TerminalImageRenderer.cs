@@ -9,6 +9,9 @@ namespace Neuroma.Terminal;
 public static class TerminalImageRenderer
 {
     public static IReadOnlyList<string> Render(byte[] imageData, int maxColumns, int maxRows)
+        => RenderBlock(imageData, maxColumns, maxRows).Rows;
+
+    internal static TerminalImageBlock RenderBlock(byte[] imageData, int maxColumns, int maxRows)
     {
         ArgumentNullException.ThrowIfNull(imageData);
         maxColumns = Math.Max(1, maxColumns);
@@ -41,10 +44,13 @@ public static class TerminalImageRenderer
         var image = new CanvasImage(buffer.ToArray()) { MaxWidth = targetWidth };
         console.Write(image);
 
-        return output.ToString().Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n')
+        IReadOnlyList<string> rows = output.ToString().Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n')
             .Split('\n').ToList();
+        return new TerminalImageBlock(rows, targetWidth);
     }
 }
+
+internal sealed record TerminalImageBlock(IReadOnlyList<string> Rows, int Width);
 
 internal sealed record DisplayLine(
     string Content,
@@ -52,7 +58,9 @@ internal sealed record DisplayLine(
     string? SpokenText = null,
     IReadOnlyList<int>? SpokenColumnMap = null,
     IReadOnlyList<EpubTextStyle>? Styles = null,
-    int ParagraphId = -1)
+    int ParagraphId = -1,
+    string? AnsiOverlay = null,
+    int AnsiOverlayColumn = 0)
 {
     public string SearchText => IsImage ? "" : SpokenText ?? Content;
 }

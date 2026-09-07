@@ -7,7 +7,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 
 - EPUB 2 and EPUB 3 reading order and table of contents
 - Reflowing XHTML terminal rendering: headings, paragraphs, lists, quotes, code, and images
-- Two-row terminal drop caps for EPUB small-cap scene openings
+- Large true-colour Celtic initials at chapter openings (A, C, M, and S), with compact drop caps elsewhere
 - Gentle semantic colour for dialogue, emphasis, links, code, and quotations
 - Optional paragraph-focus colour mode with no character-attribution guesses
 - Chapter/page navigation and whole-book search

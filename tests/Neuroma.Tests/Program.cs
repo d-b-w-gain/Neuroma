@@ -55,6 +55,15 @@ internal static class Program
                 "renders the opening initial as a two-row terminal glyph");
             Assert(dropCapRows[0].SearchText.StartsWith("MOLLY FISHED", StringComparison.Ordinal),
                 "keeps searchable and spoken drop-cap text intact");
+            Assert(TerminalIlluminatedDropCapRenderer.TryRender(molly, 60, 9,
+                out IReadOnlyList<DisplayLine> illuminatedRows), "loads an embedded illuminated opening initial");
+            Assert(illuminatedRows.Count >= 6 && illuminatedRows.All(line => line.AnsiOverlay is not null),
+                "renders a larger multi-row Celtic initial beside the opening paragraph");
+            Assert(string.Concat(illuminatedRows.Select(line => line.SearchText)).Contains("MOLLY", StringComparison.Ordinal),
+                "keeps illuminated opening text searchable and speakable");
+            foreach (char initial in "ACMS")
+                Assert(TerminalIlluminatedDropCapRenderer.TryRender(new EpubDropCap("", initial, "n opening paragraph."),
+                    60, 10, out _), $"embeds the Celtic {initial} initial");
             Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "cyberspace cowboy"),
                 "preserves real whitespace across inline XHTML styling");
             EpubText inlineStyles = styledOpening.OfType<EpubText>().Single(text => text.Text == "cyberspace cowboy");
