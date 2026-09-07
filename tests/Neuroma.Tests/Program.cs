@@ -84,6 +84,14 @@ internal static class Program
                 "adds a clear pause around scene and structural breaks");
             Assert(paragraphChunks[3].PauseBeforeMilliseconds >= 1000,
                 "adds a clear pause at chapter transitions");
+            IReadOnlyList<SplashLine> fullSplash = TerminalSplash.BuildLayout(100, 30);
+            Assert(fullSplash.Any(line => line.Text.Contains("N E U R O M A", StringComparison.Ordinal)) &&
+                fullSplash.Any(line => line.Text.Contains("EPUB SIGNAL ACQUIRED", StringComparison.Ordinal)) &&
+                fullSplash.All(line => line.Row is >= 0 and < 30 && line.Text.Length <= 100),
+                "lays out the full Neuroma splash safely inside the terminal");
+            IReadOnlyList<SplashLine> smallSplash = TerminalSplash.BuildLayout(20, 6);
+            Assert(smallSplash.Count == 2 && smallSplash.All(line => line.Text.Length <= 20),
+                "falls back to a compact splash in small terminals");
             Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "cyberspace cowboy"),
                 "preserves real whitespace across inline XHTML styling");
             EpubText inlineStyles = styledOpening.OfType<EpubText>().Single(text => text.Text == "cyberspace cowboy");

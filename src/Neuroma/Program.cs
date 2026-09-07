@@ -12,7 +12,12 @@ public static class Program
     {
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Any(a => a is "--help" or "-h")) { PrintHelp(); return 0; }
-        if (args.Any(a => a is "--version" or "-v")) { Console.WriteLine("Neuroma 0.5.1"); return 0; }
+        if (args.Any(a => a is "--version" or "-v"))
+        {
+            Version version = typeof(Program).Assembly.GetName().Version ?? new Version(0, 0, 0);
+            Console.WriteLine($"Neuroma {version.Major}.{version.Minor}.{Math.Max(0, version.Build)}");
+            return 0;
+        }
 
         bool plain = args.Any(a => a == "--plain") || Console.IsOutputRedirected;
         SpeechSettings speechSettings;
@@ -74,7 +79,8 @@ public static class Program
           --speed RATE       Speech speed from 0.25 to 4
 
         Keys: arrows or j/k scroll; Space/PgUp/PgDn page; h/l change chapter;
-              s speak/stop; c colour mode; t contents; / search; F11 maximize;
+              s speak/pause/resume; Shift+S stop; c colour mode; t contents;
+              / search; F11 maximize;
               ? help; q quit.
         """);
 }

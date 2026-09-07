@@ -30,6 +30,7 @@ public sealed class ReaderApp
         _screen.Enter();
         try
         {
+            if (!TerminalSplash.Show(_screen)) return;
             bool running = true;
             while (running)
             {

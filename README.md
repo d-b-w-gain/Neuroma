@@ -6,6 +6,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 ## Features
 
 - EPUB 2 and EPUB 3 reading order and table of contents
+- Responsive terminal splash screen with full and compact layouts
 - Reflowing XHTML terminal rendering: headings, paragraphs, lists, quotes, code, and images
 - Compact three-row half-block initials for every letter A–Z
 - Gentle semantic colour for dialogue, emphasis, links, code, and quotations
@@ -28,6 +29,9 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 
 Run `Register-Neuroma.cmd` after building to add Neuroma to Windows' **Open
 with** list for `.epub` files. This is per-user and needs no administrator access.
+The interactive reader opens on the Neuroma splash screen: press Enter or Space
+to open the book, `F11` to resize first, or `q` to exit. `--plain` output bypasses
+the splash entirely.
 
 | Key | Action |
 | --- | --- |

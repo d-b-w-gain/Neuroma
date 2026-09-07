@@ -10,6 +10,8 @@ internal sealed class TerminalScreen : IDisposable
     public int Width => Math.Max(20, Console.WindowWidth);
     public int Height => Math.Max(6, Console.WindowHeight);
 
+    public void Clear() => Console.Clear();
+
     public void Enter()
     {
         if (_active) return; EnableAnsiOnWindows(); Console.TreatControlCAsInput = true;
