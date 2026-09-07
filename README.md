@@ -7,7 +7,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 
 - EPUB 2 and EPUB 3 reading order and table of contents
 - Reflowing XHTML terminal rendering: headings, paragraphs, lists, quotes, code, and images
-- Large true-colour Celtic terminal initials for every letter A–Z, with compact drop caps in narrow windows
+- Compact three-row half-block initials for every letter A–Z
 - Gentle semantic colour for dialogue, emphasis, links, code, and quotations
 - Optional paragraph-focus colour mode with no character-attribution guesses
 - Chapter/page navigation and whole-book search
@@ -98,11 +98,9 @@ illustrations are resized to the available page and rendered as true-colour
 terminal cells. Unsupported images retain a descriptive text fallback. Fixed-layout
 pages and complex tables become readable text. DRM is intentionally unsupported.
 
-The large opening initials use real single-cell Cascadia Mono glyphs from ASCII,
-arrows, technical symbols, box drawing, blocks, geometric forms, and Braille.
-Every source-image patch is matched against 973 font-supported glyph rasters using
-a complete 8×16 two-dimensional DCT, with foreground colour solved independently
-for each cell. Unsupported replacement boxes are excluded from the atlas.
+Opening initials use a deliberately simple 5×6 pixel alphabet packed into three
+terminal rows with Unicode half blocks. The extra row gives curved letters—most
+notably S—enough vertical structure to remain immediately recognizable.
 
 Image decoding and terminal-cell rendering use
 [Spectre.Console.ImageSharp](https://spectreconsole.net/console/widgets/canvas-image/).

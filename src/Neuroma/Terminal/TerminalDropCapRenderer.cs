@@ -6,19 +6,32 @@ internal static class TerminalDropCapRenderer
 {
     private static readonly IReadOnlyDictionary<char, string[]> Glyphs = new Dictionary<char, string[]>
     {
-        ['A'] = [".###.", "#...#", "#####", "#...#"], ['B'] = ["####.", "#...#", "####.", "####."],
-        ['C'] = [".####", "#....", "#....", ".####"], ['D'] = ["####.", "#...#", "#...#", "####."],
-        ['E'] = ["#####", "#....", "####.", "#####"], ['F'] = ["#####", "#....", "####.", "#...."],
-        ['G'] = [".####", "#....", "#..##", ".###."], ['H'] = ["#...#", "#...#", "#####", "#...#"],
-        ['I'] = ["#####", "..#..", "..#..", "#####"], ['J'] = ["....#", "....#", "#...#", ".###."],
-        ['K'] = ["#..#.", "###..", "#..#.", "#...#"], ['L'] = ["#....", "#....", "#....", "#####"],
-        ['M'] = ["#...#", "#####", "#.#.#", "#...#"], ['N'] = ["#...#", "##..#", "#.#.#", "#..##"],
-        ['O'] = [".###.", "#...#", "#...#", ".###."], ['P'] = ["####.", "#...#", "####.", "#...."],
-        ['Q'] = [".###.", "#...#", "#..##", ".####"], ['R'] = ["####.", "#...#", "####.", "#..#."],
-        ['S'] = [".####", "#....", ".###.", "####."], ['T'] = ["#####", "..#..", "..#..", "..#.."],
-        ['U'] = ["#...#", "#...#", "#...#", ".###."], ['V'] = ["#...#", "#...#", ".#.#.", "..#.."],
-        ['W'] = ["#...#", "#.#.#", "#####", "#...#"], ['X'] = ["#...#", ".#.#.", ".#.#.", "#...#"],
-        ['Y'] = ["#...#", ".#.#.", "..#..", "..#.."], ['Z'] = ["#####", "...#.", ".#...", "#####"]
+        ['A'] = [".###.", "#...#", "#...#", "#####", "#...#", "#...#"],
+        ['B'] = ["####.", "#...#", "####.", "#...#", "#...#", "####."],
+        ['C'] = [".####", "#....", "#....", "#....", "#....", ".####"],
+        ['D'] = ["####.", "#...#", "#...#", "#...#", "#...#", "####."],
+        ['E'] = ["#####", "#....", "####.", "#....", "#....", "#####"],
+        ['F'] = ["#####", "#....", "####.", "#....", "#....", "#...."],
+        ['G'] = [".####", "#....", "#....", "#.###", "#...#", ".###."],
+        ['H'] = ["#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+        ['I'] = ["#####", "..#..", "..#..", "..#..", "..#..", "#####"],
+        ['J'] = ["....#", "....#", "....#", "#...#", "#...#", ".###."],
+        ['K'] = ["#...#", "#..#.", "###..", "#..#.", "#...#", "#...#"],
+        ['L'] = ["#....", "#....", "#....", "#....", "#....", "#####"],
+        ['M'] = ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#"],
+        ['N'] = ["#...#", "##..#", "##..#", "#.#.#", "#..##", "#...#"],
+        ['O'] = [".###.", "#...#", "#...#", "#...#", "#...#", ".###."],
+        ['P'] = ["####.", "#...#", "#...#", "####.", "#....", "#...."],
+        ['Q'] = [".###.", "#...#", "#...#", "#.#.#", "#..#.", ".##.#"],
+        ['R'] = ["####.", "#...#", "#...#", "####.", "#..#.", "#...#"],
+        ['S'] = [".####", "#....", "#....", ".###.", "....#", "####."],
+        ['T'] = ["#####", "..#..", "..#..", "..#..", "..#..", "..#.."],
+        ['U'] = ["#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+        ['V'] = ["#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."],
+        ['W'] = ["#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"],
+        ['X'] = ["#...#", "#...#", ".#.#.", ".#.#.", "#...#", "#...#"],
+        ['Y'] = ["#...#", "#...#", ".#.#.", "..#..", "..#..", "..#.."],
+        ['Z'] = ["#####", "....#", "...#.", ".#...", "#....", "#####"]
     };
 
     public static IReadOnlyList<DisplayLine> Render(EpubDropCap dropCap, int width, int paragraphId = -1)
@@ -27,22 +40,26 @@ internal static class TerminalDropCapRenderer
         int leftWidth = dropCap.Prefix.Length + glyph[0].Length + 1;
         int sideWidth = Math.Max(8, width - leftWidth);
         IReadOnlyList<string> narrowLines = TextWrapper.Wrap([dropCap.Remainder], sideWidth);
-        string first = narrowLines.Count > 0 ? narrowLines[0] : "";
-        string second = narrowLines.Count > 1 ? narrowLines[1] : "";
-        int firstStart = FindFrom(dropCap.Remainder, first, 0);
-        int secondStart = FindFrom(dropCap.Remainder, second, firstStart + first.Length);
         EpubTextStyle[] sourceStyles = NormalizeStyles(dropCap.Styles, dropCap.Text.Length);
-        var result = new List<DisplayLine>
+        var result = new List<DisplayLine>();
+        int sourceCursor = 0;
+        for (int row = 0; row < glyph.Length; row++)
         {
-            CreateFirstLine(dropCap, glyph[0], first, firstStart, sourceStyles, paragraphId),
-            new(new string(' ', dropCap.Prefix.Length) + glyph[1] + " " + second,
-                SpokenText: second, SpokenColumnMap: LinearMap(second.Length, leftWidth),
-                Styles: CreateSecondLineStyles(dropCap, glyph[1], second, secondStart, sourceStyles), ParagraphId: paragraphId)
-        };
+            string beside = row < narrowLines.Count ? narrowLines[row] : "";
+            int besideStart = FindFrom(dropCap.Remainder, beside, sourceCursor);
+            sourceCursor = besideStart + beside.Length;
+            if (row == 0)
+                result.Add(CreateFirstLine(dropCap, glyph[row], beside, besideStart, sourceStyles, paragraphId));
+            else
+                result.Add(new DisplayLine(new string(' ', dropCap.Prefix.Length) + glyph[row] + " " + beside,
+                    SpokenText: beside, SpokenColumnMap: LinearMap(beside.Length, leftWidth),
+                    Styles: CreateFollowingLineStyles(dropCap, glyph[row], beside, besideStart, sourceStyles),
+                    ParagraphId: paragraphId));
+        }
 
-        if (narrowLines.Count > 2)
+        if (narrowLines.Count > glyph.Length)
         {
-            int remainingStart = FindFrom(dropCap.Remainder, narrowLines[2], secondStart + second.Length);
+            int remainingStart = FindFrom(dropCap.Remainder, narrowLines[glyph.Length], sourceCursor);
             string remaining = dropCap.Remainder[remainingStart..];
             int styleStart = dropCap.Prefix.Length + 1 + remainingStart;
             var styledRemainder = new EpubText(remaining, sourceStyles[styleStart..]);
@@ -74,7 +91,7 @@ internal static class TerminalDropCapRenderer
         return new DisplayLine(content, SpokenText: spoken, SpokenColumnMap: map, Styles: styles, ParagraphId: paragraphId);
     }
 
-    private static IReadOnlyList<EpubTextStyle> CreateSecondLineStyles(EpubDropCap dropCap, string glyph,
+    private static IReadOnlyList<EpubTextStyle> CreateFollowingLineStyles(EpubDropCap dropCap, string glyph,
         string text, int remainderStart, IReadOnlyList<EpubTextStyle> sourceStyles)
     {
         int prefixLength = dropCap.Prefix.Length;
@@ -108,8 +125,8 @@ internal static class TerminalDropCapRenderer
     private static string[] MakeGlyph(char value)
     {
         if (!Glyphs.TryGetValue(char.ToUpperInvariant(value), out string[]? pixels))
-            return [$"[{value}]", "   "];
-        return [Pack(pixels[0], pixels[1]), Pack(pixels[2], pixels[3])];
+            return [$"[{value}]", " | ", "   "];
+        return [Pack(pixels[0], pixels[1]), Pack(pixels[2], pixels[3]), Pack(pixels[4], pixels[5])];
     }
 
     private static string Pack(string upper, string lower)

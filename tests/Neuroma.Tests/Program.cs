@@ -51,22 +51,16 @@ internal static class Program
             Assert(molly.Prefix == "" && molly.Initial == 'M' && molly.Remainder == "OLLY FISHED THE key out.",
                 "recognizes a small-cap opening as a drop cap without splitting its first word");
             IReadOnlyList<DisplayLine> dropCapRows = TerminalDropCapRenderer.Render(molly, 40);
-            Assert(dropCapRows.Count >= 2 && dropCapRows[0].Content.Contains("OLLY FISHED", StringComparison.Ordinal),
-                "renders the opening initial as a two-row terminal glyph");
+            Assert(dropCapRows.Count >= 3 && dropCapRows[0].Content.Contains("OLLY FISHED", StringComparison.Ordinal),
+                "renders the opening initial as a three-row terminal glyph");
             Assert(dropCapRows[0].SearchText.StartsWith("MOLLY FISHED", StringComparison.Ordinal),
                 "keeps searchable and spoken drop-cap text intact");
-            Assert(TerminalIlluminatedDropCapRenderer.TryRender(molly, 60, 9,
-                out IReadOnlyList<DisplayLine> illuminatedRows), "loads an embedded illuminated opening initial");
-            Assert(illuminatedRows.Count >= 6 && illuminatedRows.All(line => line.AnsiOverlay is not null),
-                "renders a larger multi-row Celtic initial beside the opening paragraph");
-            Assert(illuminatedRows.Count == 14 && illuminatedRows.Any(line =>
-                line.AnsiOverlay is { } overlay && overlay.Any(character => character is >= '\u2190' and <= '\u28ff')),
-                "uses extended single-cell Unicode glyphs in the illuminated artwork");
-            Assert(string.Concat(illuminatedRows.Select(line => line.SearchText)).Contains("MOLLY", StringComparison.Ordinal),
-                "keeps illuminated opening text searchable and speakable");
-            foreach (char initial in "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-                Assert(TerminalIlluminatedDropCapRenderer.TryRender(new EpubDropCap("", initial, "n opening paragraph."),
-                    60, 10, out _), $"embeds the Celtic {initial} initial");
+            IReadOnlyList<DisplayLine> sRows = TerminalDropCapRenderer.Render(
+                new EpubDropCap("", 'S', "AMPLE TEXT FOR THE GLYPH."), 40, 10);
+            Assert(sRows.Count >= 3 && sRows[0].Content.StartsWith("▄▀▀▀▀", StringComparison.Ordinal) &&
+                sRows[1].Content.StartsWith("▀▄▄▄ ", StringComparison.Ordinal) &&
+                sRows[2].Content.StartsWith("▄▄▄▄▀", StringComparison.Ordinal),
+                "renders S with distinct upper, middle, and lower curves");
             Assert(styledOpening.OfType<EpubText>().Any(text => text.Text == "cyberspace cowboy"),
                 "preserves real whitespace across inline XHTML styling");
             EpubText inlineStyles = styledOpening.OfType<EpubText>().Single(text => text.Text == "cyberspace cowboy");

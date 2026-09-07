@@ -58,9 +58,7 @@ internal sealed record DisplayLine(
     string? SpokenText = null,
     IReadOnlyList<int>? SpokenColumnMap = null,
     IReadOnlyList<EpubTextStyle>? Styles = null,
-    int ParagraphId = -1,
-    string? AnsiOverlay = null,
-    int AnsiOverlayColumn = 0)
+    int ParagraphId = -1)
 {
     public string SearchText => IsImage ? "" : SpokenText ?? Content;
 }

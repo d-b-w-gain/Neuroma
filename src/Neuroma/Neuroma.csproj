@@ -4,16 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Neuroma</AssemblyName>
     <RootNamespace>Neuroma</RootNamespace>
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
     <ApplicationIcon>..\..\assets\Neuroma.ico</ApplicationIcon>
     <Authors>d-b-w-gain</Authors>
     <Description>A fast, distraction-free EPUB reader for the terminal.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Spectre.Console.ImageSharp" Version="0.57.2" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\assets\dropcaps\ascii\celtic-*.ans"
-                      LogicalName="Neuroma.DropCaps.Ascii.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

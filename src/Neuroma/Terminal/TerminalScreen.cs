@@ -38,14 +38,6 @@ internal sealed class TerminalScreen : IDisposable
         Console.Write("\x1b[0m");
     }
 
-    public void WriteAnsiOverlay(int row, int left, string ansiContent)
-    {
-        if (row < 0 || row >= Height || string.IsNullOrEmpty(ansiContent)) return;
-        Console.SetCursorPosition(Math.Clamp(left, 0, Width - 1), row);
-        Console.Write(ansiContent);
-        Console.Write("\x1b[0m");
-    }
-
     public void WriteHighlightedRow(int row, string prefix, string content, int start, int end, ConsoleColor foreground)
     {
         WriteRow(row, prefix + content, foreground);
