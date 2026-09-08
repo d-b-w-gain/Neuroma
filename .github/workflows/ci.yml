@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test / ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            os: windows-latest
+          - label: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore Neuroma.sln
+
+      - name: Build
+        run: dotnet build Neuroma.sln --configuration Release --no-restore
+
+      - name: Run Neuroma test harness
+        run: dotnet run --project tests/Neuroma.Tests/Neuroma.Tests.csproj --configuration Release --no-build
+
+      - name: Check application startup
+        run: dotnet run --project src/Neuroma/Neuroma.csproj --configuration Release --no-build -- --version
