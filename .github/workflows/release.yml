@@ -1,0 +1,109 @@
+name: Release builds
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate / ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            os: windows-latest
+          - label: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore Neuroma.sln
+      - run: dotnet build Neuroma.sln --configuration Release --no-restore
+      - run: dotnet run --project tests/Neuroma.Tests/Neuroma.Tests.csproj --configuration Release --no-build
+
+  package:
+    name: Package / ${{ matrix.label }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64
+            os: windows-latest
+            rid: win-x64
+            archive: Neuroma-win-x64.zip
+          - label: macOS Apple Silicon
+            os: macos-latest
+            rid: osx-arm64
+            archive: Neuroma-osx-arm64.tar.gz
+          - label: macOS Intel
+            os: macos-latest
+            rid: osx-x64
+            archive: Neuroma-osx-x64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish self-contained executable
+        run: >-
+          dotnet publish src/Neuroma/Neuroma.csproj --configuration Release
+          --runtime ${{ matrix.rid }} --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None -p:DebugSymbols=false --output release/publish
+
+      - name: Package Windows files
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release/package | Out-Null
+          Copy-Item release/publish/Neuroma.exe, README.md, neuroma.example.json, Register-Neuroma.cmd, Register-Neuroma.ps1, assets/Neuroma.ico release/package/
+          Compress-Archive -Path release/package/* -DestinationPath release/${{ matrix.archive }}
+
+      - name: Package macOS files
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p "release/Neuroma-${{ matrix.rid }}"
+          cp release/publish/Neuroma README.md neuroma.example.json "release/Neuroma-${{ matrix.rid }}/"
+          chmod +x "release/Neuroma-${{ matrix.rid }}/Neuroma"
+          tar -czf "release/${{ matrix.archive }}" -C release "Neuroma-${{ matrix.rid }}"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: release/${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged builds
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" release-artifacts/*
+          --verify-tag --generate-notes --title "Neuroma $GITHUB_REF_NAME"

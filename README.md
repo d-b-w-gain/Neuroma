@@ -103,6 +103,16 @@ Install the .NET 8 SDK, then run:
 The script runs the dependency-free test harness and publishes a self-contained,
 single-file Windows x64 executable to `dist\Neuroma.exe`.
 
+## Continuous integration and releases
+
+Every pull request to `main` runs the full test harness and an application-startup
+check on GitHub-hosted Windows and macOS machines. Changes should be merged only
+after both required checks pass.
+
+Pushing a version tag such as `v0.10.0` validates both operating systems and
+packages three self-contained downloads: Windows x64, macOS Apple Silicon, and
+macOS Intel. Tag builds are attached automatically to a generated GitHub Release.
+
 Neuroma supports standard reflowable EPUB 2/3. PNG, JPEG, GIF, BMP, and WebP
 illustrations are resized to the available page and rendered as true-colour
 terminal cells. Unsupported images retain a descriptive text fallback. Fixed-layout
