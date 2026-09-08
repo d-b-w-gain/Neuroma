@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
@@ -22,7 +23,7 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
     private string _resumeStatus = "KOKORO · READY";
     private SpeechCue? _currentCue;
     private TaskCompletionSource<bool>? _resumeSignal;
-    private MciWavePlayer? _activePlayer;
+    private IWavePlayer? _activePlayer;
     private string _kokoroUrl;
 
     public KokoroNarrator(SpeechSettings settings)
@@ -93,7 +94,7 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
 
     public void Pause()
     {
-        MciWavePlayer? player;
+        IWavePlayer? player;
         lock (_gate)
         {
             if (!_isRunning || _isPaused) return;
@@ -109,7 +110,7 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
 
     public void Resume()
     {
-        MciWavePlayer? player;
+        IWavePlayer? player;
         TaskCompletionSource<bool>? signal;
         lock (_gate)
         {
@@ -129,7 +130,7 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
     {
         CancellationTokenSource? cancellation;
         TaskCompletionSource<bool>? signal;
-        MciWavePlayer? player;
+        IWavePlayer? player;
         lock (_gate)
         {
             cancellation = _cancellation;
@@ -281,14 +282,13 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
 
     private async Task PlaySpeechAsync(byte[] audio, IReadOnlyList<SpeechCue> cues, CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Kokoro playback currently requires Windows.");
         string audioPath = Path.Combine(Path.GetTempPath(), $"neuroma-{Guid.NewGuid():N}.wav");
-        MciWavePlayer? player = null;
+        IWavePlayer? player = null;
         try
         {
             await File.WriteAllBytesAsync(audioPath, audio, cancellationToken).ConfigureAwait(false);
             await WaitWhilePausedAsync(cancellationToken).ConfigureAwait(false);
-            player = new MciWavePlayer(audioPath);
+            player = CreateWavePlayer(audioPath);
             player.Play();
             lock (_gate)
             {
@@ -445,7 +445,24 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         Changed?.Invoke();
     }
 
-    private sealed class MciWavePlayer : IDisposable
+    private static IWavePlayer CreateWavePlayer(string path)
+    {
+        if (OperatingSystem.IsWindows()) return new MciWavePlayer(path);
+        if (OperatingSystem.IsMacOS()) return new AfplayWavePlayer(path);
+        throw new PlatformNotSupportedException("Kokoro playback currently requires Windows or macOS.");
+    }
+
+    private interface IWavePlayer : IDisposable
+    {
+        double PositionSeconds { get; }
+        bool HasEnded { get; }
+        void Play();
+        void TryPause();
+        void TryResume();
+        void TryStop();
+    }
+
+    private sealed class MciWavePlayer : IWavePlayer
     {
         private readonly string _alias = "neuroma" + Guid.NewGuid().ToString("N");
         private readonly object _commandLock = new();
@@ -520,6 +537,102 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         [DllImport("winmm.dll", CharSet = CharSet.Unicode, EntryPoint = "mciGetErrorStringW")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool MciGetErrorString(int errorCode, StringBuilder errorText, int errorTextSize);
+    }
+
+    private sealed class AfplayWavePlayer : IWavePlayer
+    {
+        private const int SigStop = 17;
+        private const int SigContinue = 19;
+        private readonly string _path;
+        private readonly object _stateLock = new();
+        private Process? _process;
+        private long _startedAt;
+        private long _pauseStartedAt;
+        private long _pausedTicks;
+        private bool _paused;
+
+        public AfplayWavePlayer(string path) => _path = path;
+
+        public double PositionSeconds
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    if (_startedAt == 0) return 0;
+                    long now = _paused ? _pauseStartedAt : Stopwatch.GetTimestamp();
+                    return Math.Max(0, now - _startedAt - _pausedTicks) / (double)Stopwatch.Frequency;
+                }
+            }
+        }
+
+        public bool HasEnded
+        {
+            get
+            {
+                lock (_stateLock) return _process is { HasExited: true };
+            }
+        }
+
+        public void Play()
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "/usr/bin/afplay",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add(_path);
+            Process process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("macOS audio playback did not start.");
+            lock (_stateLock)
+            {
+                _process = process;
+                _startedAt = Stopwatch.GetTimestamp();
+            }
+        }
+
+        public void TryPause()
+        {
+            lock (_stateLock)
+            {
+                if (_paused || _process is not { HasExited: false } process || Kill(process.Id, SigStop) != 0) return;
+                _pauseStartedAt = Stopwatch.GetTimestamp();
+                _paused = true;
+            }
+        }
+
+        public void TryResume()
+        {
+            lock (_stateLock)
+            {
+                if (!_paused || _process is not { HasExited: false } process || Kill(process.Id, SigContinue) != 0) return;
+                _pausedTicks += Stopwatch.GetTimestamp() - _pauseStartedAt;
+                _paused = false;
+            }
+        }
+
+        public void TryStop()
+        {
+            lock (_stateLock)
+            {
+                if (_process is not { HasExited: false } process) return;
+                try { process.Kill(); } catch (InvalidOperationException) { }
+            }
+        }
+
+        public void Dispose()
+        {
+            TryStop();
+            lock (_stateLock)
+            {
+                _process?.Dispose();
+                _process = null;
+            }
+        }
+
+        [DllImport("libc", SetLastError = true, EntryPoint = "kill")]
+        private static extern int Kill(int processId, int signal);
     }
 
     [GeneratedRegex(@"^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$")]

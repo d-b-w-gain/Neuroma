@@ -144,8 +144,10 @@ internal static class Program
                        out int clampedProgress, out _) && clampedProgress == 100,
                 "clamps malformed installer percentages safely");
             Assert(File.Exists(Path.Combine(AppContext.BaseDirectory, "Install-Neuroma-Kokoro.ps1")) &&
-                   File.Exists(Path.Combine(AppContext.BaseDirectory, "Start-Neuroma-Kokoro.ps1")),
-                "ships the local Kokoro setup scripts beside Neuroma");
+                   File.Exists(Path.Combine(AppContext.BaseDirectory, "Start-Neuroma-Kokoro.ps1")) &&
+                   File.Exists(Path.Combine(AppContext.BaseDirectory, "Install-Neuroma-Kokoro.sh")) &&
+                   File.Exists(Path.Combine(AppContext.BaseDirectory, "Start-Neuroma-Kokoro.sh")),
+                "ships the Windows and macOS Kokoro setup scripts beside Neuroma");
             bool nextStartedBeforePlayback = false;
             var played = new List<int>();
             SpeechPrefetchPipeline.RunAsync<int, int>([0, 1, 2],

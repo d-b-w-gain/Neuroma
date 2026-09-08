@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Neuroma.Speech;
 
@@ -96,15 +97,20 @@ internal sealed partial class KokoroSetupDialog
 
     private void StartInstallation()
     {
-        if (!OperatingSystem.IsWindows())
+        if (!SupportsAutomaticInstallation())
         {
             _status = SetupStatus.Error;
             _stage = "Setup unavailable";
-            _detail = "Automatic local Kokoro installation currently requires Windows. Configure a reachable Kokoro URL to use speech on this platform.";
+            _detail = OperatingSystem.IsMacOS()
+                ? "Automatic local Kokoro installation requires an Apple Silicon Mac. Configure a reachable Kokoro URL on Intel Macs."
+                : "Automatic local Kokoro installation requires Windows or an Apple Silicon Mac. Configure a reachable Kokoro URL on this platform.";
             return;
         }
 
-        string installerPath = Path.Combine(AppContext.BaseDirectory, "Install-Neuroma-Kokoro.ps1");
+        string installerName = OperatingSystem.IsWindows()
+            ? "Install-Neuroma-Kokoro.ps1"
+            : "Install-Neuroma-Kokoro.sh";
+        string installerPath = Path.Combine(AppContext.BaseDirectory, installerName);
         if (!File.Exists(installerPath))
         {
             _status = SetupStatus.Error;
@@ -117,17 +123,17 @@ internal sealed partial class KokoroSetupDialog
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
-            foreach (string argument in new[]
-                     {
-                         "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                         "-File", installerPath, "-AppDirectory", AppContext.BaseDirectory
-                     })
+            IEnumerable<string> arguments = OperatingSystem.IsWindows()
+                ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", installerPath, "-AppDirectory", AppContext.BaseDirectory]
+                : [installerPath, AppContext.BaseDirectory];
+            foreach (string argument in arguments)
                 startInfo.ArgumentList.Add(argument);
 
             _installer = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
@@ -286,13 +292,15 @@ internal sealed partial class KokoroSetupDialog
         else
         {
             lines.Add((PanelRow("", inner), ConsoleColor.Gray));
-            if (OperatingSystem.IsWindows())
+            if (SupportsAutomaticInstallation())
                 lines.Add((PanelRow("  [ I ]  INSTALL / START LOCAL KOKORO", inner), ConsoleColor.Cyan));
             else
-                lines.Add((PanelRow("  Automatic installation is currently Windows-only.", inner), ConsoleColor.DarkYellow));
+                lines.Add((PanelRow(OperatingSystem.IsMacOS()
+                    ? "  Local setup requires an Apple Silicon build."
+                    : "  Automatic local setup is unavailable here.", inner), ConsoleColor.DarkYellow));
             lines.Add((PanelRow("  [ R ]  RETRY CONFIGURED ENDPOINT", inner), ConsoleColor.Gray));
             lines.Add((PanelRow("  [ ESC ]  CONTINUE WITHOUT SPEECH", inner), ConsoleColor.DarkGray));
-            if (OperatingSystem.IsWindows())
+            if (SupportsAutomaticInstallation())
             {
                 lines.Add((PanelRow("", inner), ConsoleColor.Gray));
                 lines.Add((PanelRow("  Downloads: uv, Python, Kokoro and model data.", inner), ConsoleColor.DarkGray));
@@ -330,6 +338,10 @@ internal sealed partial class KokoroSetupDialog
     }
 
     private enum SetupStatus { Offline, Installing, Ready, Error }
+
+    private static bool SupportsAutomaticInstallation()
+        => OperatingSystem.IsWindows() ||
+           (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64);
 
     [GeneratedRegex(@"^NEUROMA_PROGRESS\|(\d{1,3})\|(.*)$")]
     private static partial Regex ProgressLine();

@@ -22,7 +22,10 @@ try {
     Copy-Item -LiteralPath $builtExecutable -Destination $nextExecutable -Force
     Write-Warning 'Neuroma.exe is running, so the update was saved as dist\Neuroma.next.exe.'
 }
-foreach ($supportFile in @('Install-Neuroma-Kokoro.ps1', 'Start-Neuroma-Kokoro.ps1')) {
+foreach ($supportFile in @(
+    'Install-Neuroma-Kokoro.ps1', 'Start-Neuroma-Kokoro.ps1',
+    'Install-Neuroma-Kokoro.sh', 'Start-Neuroma-Kokoro.sh'
+)) {
     Copy-Item -LiteralPath (Join-Path $publishDirectory $supportFile) `
         -Destination (Join-Path $PSScriptRoot "dist\$supportFile") -Force
 }

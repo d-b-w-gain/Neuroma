@@ -1,0 +1,69 @@
+name: Kokoro macOS integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "Install-Neuroma-Kokoro.sh"
+      - "Start-Neuroma-Kokoro.sh"
+      - "src/Neuroma/Speech/KokoroNarrator.cs"
+      - "src/Neuroma/Terminal/KokoroSetupDialog.cs"
+      - ".github/workflows/kokoro-macos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kokoro-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: Install and synthesize / Apple Silicon
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify Apple Silicon runner and scripts
+        shell: bash
+        run: |
+          test "$(uname -m)" = "arm64"
+          test -x /usr/bin/afplay
+          sh -n Install-Neuroma-Kokoro.sh
+          sh -n Start-Neuroma-Kokoro.sh
+
+      - name: Install and start local Kokoro
+        shell: bash
+        run: |
+          app_directory="$RUNNER_TEMP/Neuroma app"
+          mkdir -p "$app_directory"
+          cp Install-Neuroma-Kokoro.sh Start-Neuroma-Kokoro.sh "$app_directory/"
+          sh "$app_directory/Install-Neuroma-Kokoro.sh" "$app_directory"
+
+      - name: Request a WAV from the local service
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"kokoro","input":"Neuroma is ready.","voice":"af_bella","response_format":"wav","speed":1,"stream":false}' \
+            http://127.0.0.1:8880/v1/audio/speech \
+            --output "$RUNNER_TEMP/neuroma-smoke.wav"
+          test -s "$RUNNER_TEMP/neuroma-smoke.wav"
+          test "$(dd if="$RUNNER_TEMP/neuroma-smoke.wav" bs=1 count=4 2>/dev/null)" = "RIFF"
+
+      - name: Show service log on failure
+        if: failure()
+        shell: bash
+        run: |
+          log_root="$HOME/Library/Application Support/Neuroma/Kokoro/logs"
+          test ! -f "$log_root/kokoro.stdout.log" || tail -n 100 "$log_root/kokoro.stdout.log"
+          test ! -f "$log_root/kokoro.stderr.log" || tail -n 100 "$log_root/kokoro.stderr.log"
+
+      - name: Stop local service
+        if: always()
+        shell: bash
+        run: |
+          pid_path="$HOME/Library/Application Support/Neuroma/Kokoro/kokoro.pid"
+          if test -f "$pid_path"; then kill "$(cat "$pid_path")" 2>/dev/null || true; fi
