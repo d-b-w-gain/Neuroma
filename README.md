@@ -15,6 +15,7 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
 - Kokoro read-aloud from the current page with timed word highlighting and pause/resume
+- In-terminal setup for a private, local Kokoro service on Windows and Apple Silicon Macs
 - One-segment Kokoro prefetching for continuous playback between sections
 - Paragraph-based narration with distinct pauses for paragraphs, headings, scene breaks, and chapter transitions
 - Helpful malformed-file and DRM errors
@@ -76,6 +77,22 @@ so visual wrapping and character counts never split a sentence. While one
 paragraph plays, Neuroma generates and buffers the next paragraph and its
 timestamps. Short structural pauses separate paragraphs; longer pauses mark
 headings, scene breaks, and chapter transitions.
+
+If the configured endpoint cannot be reached, `s` opens the Kokoro setup panel.
+Press `i` to install or start a private local service, `r` to retry the configured
+endpoint, or Escape to continue without speech. Windows stores it under
+`%LOCALAPPDATA%\Neuroma\Kokoro`; Apple Silicon Macs use
+`~/Library/Application Support/Neuroma/Kokoro` and enable Apple's MPS acceleration.
+The installer obtains Astral `uv` without administrator access, then downloads a
+pinned Kokoro-FastAPI revision and checksum-verified model files. The first
+installation is a substantial download and may take several minutes. If NeuroMD
+has already installed the same Windows service, Neuroma reuses it instead of
+downloading another copy. Automatic Mac installation requires macOS 13 or newer
+on Apple Silicon; Intel Macs can use a separately configured endpoint.
+
+macOS narration uses the built-in `afplay` utility, including pause, resume, and
+timed word highlighting. No Homebrew, Docker, X11, or separate audio package is
+required.
 
 Copy `neuroma.example.json` to `neuroma.json` beside `Neuroma.exe` (or keep it
 in the working directory) and set the same endpoint, voice, and speed used by

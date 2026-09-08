@@ -67,7 +67,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path release/package | Out-Null
-          Copy-Item release/publish/Neuroma.exe, README.md, neuroma.example.json, Register-Neuroma.cmd, Register-Neuroma.ps1, assets/Neuroma.ico release/package/
+          Copy-Item release/publish/Neuroma.exe, README.md, neuroma.example.json, Register-Neuroma.cmd, Register-Neuroma.ps1, Install-Neuroma-Kokoro.ps1, Start-Neuroma-Kokoro.ps1, assets/Neuroma.ico release/package/
           Compress-Archive -Path release/package/* -DestinationPath release/${{ matrix.archive }}
 
       - name: Package macOS files
@@ -75,8 +75,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p "release/Neuroma-${{ matrix.rid }}"
-          cp release/publish/Neuroma README.md neuroma.example.json "release/Neuroma-${{ matrix.rid }}/"
-          chmod +x "release/Neuroma-${{ matrix.rid }}/Neuroma"
+          cp release/publish/Neuroma README.md neuroma.example.json Install-Neuroma-Kokoro.sh Start-Neuroma-Kokoro.sh "release/Neuroma-${{ matrix.rid }}/"
+          chmod +x "release/Neuroma-${{ matrix.rid }}/Neuroma" "release/Neuroma-${{ matrix.rid }}/"*.sh
           tar -czf "release/${{ matrix.archive }}" -C release "Neuroma-${{ matrix.rid }}"
 
       - name: Upload package

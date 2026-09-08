@@ -12,4 +12,14 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console.ImageSharp" Version="0.57.2" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Install-Neuroma-Kokoro.ps1" Link="Install-Neuroma-Kokoro.ps1"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="..\..\Start-Neuroma-Kokoro.ps1" Link="Start-Neuroma-Kokoro.ps1"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="..\..\Install-Neuroma-Kokoro.sh" Link="Install-Neuroma-Kokoro.sh"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Include="..\..\Start-Neuroma-Kokoro.sh" Link="Start-Neuroma-Kokoro.sh"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
 </Project>
