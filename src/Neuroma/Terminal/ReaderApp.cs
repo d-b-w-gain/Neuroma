@@ -137,6 +137,20 @@ public sealed class ReaderApp
             return;
         }
 
+        _narrator.ReportStatus($"KOKORO · CHECKING {_narrator.KokoroUrl}");
+        Draw();
+        if (!_narrator.IsEndpointReachableAsync().GetAwaiter().GetResult())
+        {
+            bool ready = new KokoroSetupDialog(_screen, _narrator,
+                $"No response from {_narrator.KokoroUrl}").Show();
+            RequestDraw();
+            if (!ready)
+            {
+                _narrator.ReportStatus("KOKORO · ENDPOINT OFFLINE");
+                return;
+            }
+        }
+
         _appliedCue = null;
         _narrator.Start(BuildSpeechChunks());
     }
@@ -453,6 +467,7 @@ public sealed class ReaderApp
         "Shift+S       Stop Kokoro narration",
         "c             Cycle plain / gentle / focus colour", "i             Book information",
         "F11           Maximize / restore window", "q / Esc       Quit", "",
+        "If Kokoro is offline, s opens the local voice setup panel.",
         "Speech config: neuroma.json beside Neuroma.exe", "Overrides: --kokoro-url, --voice, --speed", "", "Press any key to return."]);
     private void ShowInfo() => ShowOverlay("Book information", [
         $"Title:      {_book.Metadata.Title}", $"Author:     {Fallback(_book.Metadata.Creator)}",

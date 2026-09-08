@@ -23,14 +23,47 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
     private SpeechCue? _currentCue;
     private TaskCompletionSource<bool>? _resumeSignal;
     private MciWavePlayer? _activePlayer;
+    private string _kokoroUrl;
 
-    public KokoroNarrator(SpeechSettings settings) => _settings = settings;
+    public KokoroNarrator(SpeechSettings settings)
+    {
+        _settings = settings;
+        _kokoroUrl = settings.KokoroUrl;
+    }
     public event Action? Changed;
 
     public bool IsRunning { get { lock (_gate) return _isRunning; } }
     public bool IsPaused { get { lock (_gate) return _isPaused; } }
     public string Status { get { lock (_gate) return _status; } }
     public SpeechCue? CurrentCue { get { lock (_gate) return _currentCue; } }
+    public string KokoroUrl { get { lock (_gate) return _kokoroUrl; } }
+
+    public async Task<bool> IsEndpointReachableAsync(int timeoutMilliseconds = 3000)
+    {
+        string endpoint = KokoroUrl;
+        using var timeout = new CancellationTokenSource(Math.Max(1, timeoutMilliseconds));
+        try
+        {
+            using HttpResponseMessage response = await _httpClient.GetAsync(
+                $"{endpoint}/openapi.json", HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    public void UseLocalEndpoint()
+    {
+        lock (_gate)
+        {
+            _kokoroUrl = SpeechSettings.DefaultUrl;
+            _captionApiAvailable = null;
+        }
+    }
+
+    internal void ReportStatus(string status) => SetStatus(status);
 
     public void Start(IReadOnlyList<SpeechChunk> chunks)
     {
@@ -176,6 +209,7 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
 
     private async Task<SpeechResult> RequestSpeechAsync(SpeechChunk chunk, CancellationToken cancellationToken)
     {
+        string kokoroUrl = KokoroUrl;
         var body = new
         {
             model = "kokoro",
@@ -189,7 +223,7 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         if (_captionApiAvailable != false)
         {
             using HttpResponseMessage captionResponse = await PostJsonAsync(
-                $"{_settings.KokoroUrl}/dev/captioned_speech",
+                $"{kokoroUrl}/dev/captioned_speech",
                 new
                 {
                     body.model, body.input, body.voice, body.response_format, body.speed, body.stream,
@@ -207,7 +241,7 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         }
 
         using HttpResponseMessage response = await PostJsonAsync(
-            $"{_settings.KokoroUrl}/v1/audio/speech", body, cancellationToken).ConfigureAwait(false);
+            $"{kokoroUrl}/v1/audio/speech", body, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Kokoro returned HTTP {(int)response.StatusCode}");
         byte[] audio = RepairWavHeader(await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false));

@@ -137,6 +137,15 @@ internal static class Program
             Assert(speech.KokoroUrl == "http://localhost:9999" && speech.Voice == "af_test" &&
                 Math.Abs(speech.Speed - 1.5) < 0.001, "loads Kokoro command-line settings");
             Assert(consumed.SetEquals([0, 1, 2, 3, 4]), "keeps the EPUB path separate from speech options");
+            Assert(KokoroSetupDialog.TryParseProgress("NEUROMA_PROGRESS|68|Python ready",
+                       out int setupProgress, out string setupStage) && setupProgress == 68 && setupStage == "Python ready",
+                "parses streamed local Kokoro installer progress");
+            Assert(KokoroSetupDialog.TryParseProgress("NEUROMA_PROGRESS|999|Done",
+                       out int clampedProgress, out _) && clampedProgress == 100,
+                "clamps malformed installer percentages safely");
+            Assert(File.Exists(Path.Combine(AppContext.BaseDirectory, "Install-Neuroma-Kokoro.ps1")) &&
+                   File.Exists(Path.Combine(AppContext.BaseDirectory, "Start-Neuroma-Kokoro.ps1")),
+                "ships the local Kokoro setup scripts beside Neuroma");
             bool nextStartedBeforePlayback = false;
             var played = new List<int>();
             SpeechPrefetchPipeline.RunAsync<int, int>([0, 1, 2],

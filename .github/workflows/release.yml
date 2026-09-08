@@ -67,7 +67,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path release/package | Out-Null
-          Copy-Item release/publish/Neuroma.exe, README.md, neuroma.example.json, Register-Neuroma.cmd, Register-Neuroma.ps1, assets/Neuroma.ico release/package/
+          Copy-Item release/publish/Neuroma.exe, README.md, neuroma.example.json, Register-Neuroma.cmd, Register-Neuroma.ps1, Install-Neuroma-Kokoro.ps1, Start-Neuroma-Kokoro.ps1, assets/Neuroma.ico release/package/
           Compress-Archive -Path release/package/* -DestinationPath release/${{ matrix.archive }}
 
       - name: Package macOS files
