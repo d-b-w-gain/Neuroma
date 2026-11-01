@@ -3,6 +3,7 @@ set -eu
 
 script_directory=$(CDPATH= cd "$(dirname "$0")" && pwd)
 app_directory=${1:-"$script_directory"}
+app_directory=$(CDPATH= cd "$app_directory" && pwd)
 kokoro_commit="f901ed81ff9910b80ab24f800a245873221a5445"
 short_commit="f901ed81ff99"
 uv_version="0.12.10"
