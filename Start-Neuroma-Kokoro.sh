@@ -1,11 +1,20 @@
 #!/bin/sh
 set -eu
 
-install_root=${1:-"$HOME/Library/Application Support/Neuroma/Kokoro"}
+if [ "$(uname -s)" = "Darwin" ]; then
+    default_install_root="$HOME/Library/Application Support/Neuroma/Kokoro"
+else
+    default_install_root="${XDG_DATA_HOME:-$HOME/.local/share}/Neuroma/Kokoro"
+fi
+install_root=${1:-"$default_install_root"}
 endpoint="http://127.0.0.1:8880"
 
 test_kokoro() {
-    /usr/bin/curl --fail --silent --max-time 2 "$endpoint/openapi.json" >/dev/null 2>&1
+    if command -v curl >/dev/null 2>&1; then
+        curl --fail --silent --max-time 2 "$endpoint/openapi.json" >/dev/null 2>&1
+    else
+        wget --quiet --timeout=2 --tries=1 --output-document=/dev/null "$endpoint/openapi.json" >/dev/null 2>&1
+    fi
 }
 
 if test_kokoro; then
@@ -32,21 +41,24 @@ if [ ! -x "$uv_path" ]; then
 fi
 
 log_directory="$install_root/logs"
-/bin/mkdir -p "$log_directory"
+mkdir -p "$log_directory"
 stdout_log="$log_directory/kokoro.stdout.log"
 stderr_log="$log_directory/kokoro.stderr.log"
 pid_path="$install_root/kokoro.pid"
 
-use_gpu=false
-device_type=cpu
-if [ "$(/usr/bin/uname -m)" = "arm64" ]; then
-    use_gpu=true
-    device_type=mps
+device_type=""
+if [ -f "$install_root/device" ]; then IFS= read -r device_type < "$install_root/device" || true; fi
+if [ -z "$device_type" ]; then
+    if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then device_type=mps; else device_type=cpu; fi
 fi
+case "$device_type" in
+    mps|cuda) use_gpu=true ;;
+    *) use_gpu=false; device_type=cpu ;;
+esac
 
 (
     cd "$repository_directory"
-    /usr/bin/nohup /usr/bin/env \
+    nohup env \
         PYTHONUTF8=1 \
         PROJECT_ROOT="$repository_directory" \
         USE_GPU="$use_gpu" \
@@ -69,9 +81,9 @@ fi
 IFS= read -r process_id < "$pid_path"
 attempt=0
 while [ "$attempt" -lt 240 ]; do
-    if ! /bin/kill -0 "$process_id" 2>/dev/null; then
+    if ! kill -0 "$process_id" 2>/dev/null; then
         printf '%s\n' "Kokoro exited during startup." >&2
-        if [ -f "$stderr_log" ]; then /usr/bin/tail -n 20 "$stderr_log" >&2; fi
+        if [ -f "$stderr_log" ]; then tail -n 20 "$stderr_log" >&2; fi
         exit 1
     fi
     if test_kokoro; then
@@ -79,9 +91,9 @@ while [ "$attempt" -lt 240 ]; do
         exit 0
     fi
     attempt=$((attempt + 1))
-    /bin/sleep 0.5
+    sleep 0.5
 done
 
-/bin/kill "$process_id" 2>/dev/null || true
+kill "$process_id" 2>/dev/null || true
 printf '%s\n' "Kokoro did not become ready within two minutes. See $stderr_log" >&2
 exit 1

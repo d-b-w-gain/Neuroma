@@ -103,7 +103,9 @@ internal sealed partial class KokoroSetupDialog
             _stage = "Setup unavailable";
             _detail = OperatingSystem.IsMacOS()
                 ? "Automatic local Kokoro installation requires an Apple Silicon Mac. Configure a reachable Kokoro URL on Intel Macs."
-                : "Automatic local Kokoro installation requires Windows or an Apple Silicon Mac. Configure a reachable Kokoro URL on this platform.";
+                : OperatingSystem.IsLinux()
+                    ? "Automatic local Kokoro installation on Linux requires an x64 or ARM64 system. Configure a reachable Kokoro URL on this platform."
+                    : "Automatic local Kokoro installation requires Windows, Linux, or an Apple Silicon Mac. Configure a reachable Kokoro URL on this platform.";
             return;
         }
 
@@ -115,7 +117,7 @@ internal sealed partial class KokoroSetupDialog
         {
             _status = SetupStatus.Error;
             _stage = "Setup failed";
-            _detail = $"The installer is missing beside Neuroma.exe: {installerPath}";
+            _detail = $"The installer is missing beside the Neuroma executable: {installerPath}";
             return;
         }
 
@@ -139,11 +141,12 @@ internal sealed partial class KokoroSetupDialog
             _installer = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
             _installer.OutputDataReceived += (_, eventArgs) => QueueOutput(eventArgs.Data, false);
             _installer.ErrorDataReceived += (_, eventArgs) => QueueOutput(eventArgs.Data, true);
-            if (!_installer.Start()) throw new InvalidOperationException("PowerShell did not start.");
+            if (!_installer.Start())
+                throw new InvalidOperationException(OperatingSystem.IsWindows() ? "PowerShell did not start." : "The installer shell did not start.");
             _installer.BeginOutputReadLine();
             _installer.BeginErrorReadLine();
             _status = SetupStatus.Installing;
-            _detail = "Installing under LocalAppData. The first download may take several minutes.";
+            _detail = $"Installing under {InstallLocationDescription()}. The first download may take several minutes.";
             _stage = "Preparing local installation";
             _progress = 1;
             _activity = 0;
@@ -341,7 +344,16 @@ internal sealed partial class KokoroSetupDialog
 
     private static bool SupportsAutomaticInstallation()
         => OperatingSystem.IsWindows() ||
-           (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64);
+           (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64) ||
+           (OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture is Architecture.X64 or Architecture.Arm64);
+
+    private static string InstallLocationDescription()
+    {
+        if (OperatingSystem.IsWindows()) return "LocalAppData";
+        if (OperatingSystem.IsMacOS()) return "~/Library/Application Support";
+        string? dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        return string.IsNullOrEmpty(dataHome) ? "~/.local/share" : dataHome;
+    }
 
     [GeneratedRegex(@"^NEUROMA_PROGRESS\|(\d{1,3})\|(.*)$")]
     private static partial Regex ProgressLine();
