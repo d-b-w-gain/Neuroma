@@ -448,8 +448,45 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
     private static IWavePlayer CreateWavePlayer(string path)
     {
         if (OperatingSystem.IsWindows()) return new MciWavePlayer(path);
-        if (OperatingSystem.IsMacOS()) return new AfplayWavePlayer(path);
-        throw new PlatformNotSupportedException("Kokoro playback currently requires Windows or macOS.");
+        if (OperatingSystem.IsMacOS()) return new ProcessWavePlayer(path, "/usr/bin/afplay", [], "macOS");
+        if (OperatingSystem.IsLinux()) return CreateLinuxWavePlayer(path);
+        throw new PlatformNotSupportedException("Kokoro playback currently requires Windows, macOS, or Linux.");
+    }
+
+    // PipeWire, PulseAudio, ALSA, then FFmpeg: the first player found on PATH wins.
+    private static readonly (string Command, string[] Arguments)[] LinuxPlayers =
+    [
+        ("pw-play", []),
+        ("paplay", []),
+        ("aplay", ["-q"]),
+        ("ffplay", ["-nodisp", "-autoexit", "-loglevel", "quiet"])
+    ];
+
+    private static IWavePlayer CreateLinuxWavePlayer(string path)
+    {
+        foreach ((string command, string[] arguments) in LinuxPlayers)
+        {
+            string? executable = FindOnPath(command);
+            if (executable is not null) return new ProcessWavePlayer(path, executable, arguments, "Linux");
+        }
+        throw new PlatformNotSupportedException(
+            "Kokoro playback on Linux needs pw-play, paplay, aplay, or ffplay. " +
+            "Install pipewire-bin, pulseaudio-utils, or alsa-utils.");
+    }
+
+    private static string? FindOnPath(string command)
+    {
+        string? searchPath = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrEmpty(searchPath)) return null;
+        foreach (string directory in searchPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            string candidate = Path.Combine(directory, command);
+            if (File.Exists(candidate) &&
+                (OperatingSystem.IsWindows() ||
+                 (File.GetUnixFileMode(candidate) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0))
+                return candidate;
+        }
+        return null;
     }
 
     private interface IWavePlayer : IDisposable
@@ -539,11 +576,12 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         private static extern bool MciGetErrorString(int errorCode, StringBuilder errorText, int errorTextSize);
     }
 
-    private sealed class AfplayWavePlayer : IWavePlayer
+    private sealed class ProcessWavePlayer : IWavePlayer
     {
-        private const int SigStop = 17;
-        private const int SigContinue = 19;
         private readonly string _path;
+        private readonly string _executable;
+        private readonly string[] _arguments;
+        private readonly string _platformName;
         private readonly object _stateLock = new();
         private Process? _process;
         private long _startedAt;
@@ -551,7 +589,17 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         private long _pausedTicks;
         private bool _paused;
 
-        public AfplayWavePlayer(string path) => _path = path;
+        public ProcessWavePlayer(string path, string executable, string[] arguments, string platformName)
+        {
+            _path = path;
+            _executable = executable;
+            _arguments = arguments;
+            _platformName = platformName;
+        }
+
+        // Signal numbers differ between Darwin and Linux.
+        private static int SigStop => OperatingSystem.IsMacOS() ? 17 : 19;
+        private static int SigContinue => OperatingSystem.IsMacOS() ? 19 : 18;
 
         public double PositionSeconds
         {
@@ -578,13 +626,22 @@ public sealed partial class KokoroNarrator : IAsyncDisposable
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "/usr/bin/afplay",
+                FileName = _executable,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                // Keep player chatter (for example ALSA underrun notices) off the reader's screen.
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
             };
+            foreach (string argument in _arguments) startInfo.ArgumentList.Add(argument);
             startInfo.ArgumentList.Add(_path);
             Process process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("macOS audio playback did not start.");
+                ?? throw new InvalidOperationException($"{_platformName} audio playback did not start.");
+            process.OutputDataReceived += static (_, _) => { };
+            process.ErrorDataReceived += static (_, _) => { };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             lock (_stateLock)
             {
                 _process = process;

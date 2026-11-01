@@ -89,6 +89,12 @@ internal sealed class TerminalScreen : IDisposable
 
     public void ToggleMaximize()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            // xterm window operation "toggle full-screen"; terminals that do not support it ignore it.
+            Console.Write("\x1b[10;2t");
+            return;
+        }
         if (!OperatingSystem.IsWindows()) return;
         nint window = GetConsoleWindow();
         if (window == 0) return;

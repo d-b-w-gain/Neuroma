@@ -468,7 +468,7 @@ public sealed class ReaderApp
         "c             Cycle plain / gentle / focus colour", "i             Book information",
         "F11           Maximize / restore window", "q / Esc       Quit", "",
         "If Kokoro is offline, s opens the local voice setup panel.",
-        "Speech config: neuroma.json beside Neuroma.exe", "Overrides: --kokoro-url, --voice, --speed", "", "Press any key to return."]);
+        "Speech config: neuroma.json beside Neuroma", "Overrides: --kokoro-url, --voice, --speed", "", "Press any key to return."]);
     private void ShowInfo() => ShowOverlay("Book information", [
         $"Title:      {_book.Metadata.Title}", $"Author:     {Fallback(_book.Metadata.Creator)}",
         $"Language:   {Fallback(_book.Metadata.Language)}", $"Identifier: {Fallback(_book.Metadata.Identifier)}",

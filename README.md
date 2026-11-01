@@ -15,11 +15,12 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 - Automatic reading-position persistence
 - Metadata view and plain-text output for piping
 - Kokoro read-aloud from the current page with timed word highlighting and pause/resume
-- In-terminal setup for a private, local Kokoro service on Windows and Apple Silicon Macs
+- In-terminal setup for a private, local Kokoro service on Windows, Linux, and Apple Silicon Macs
 - One-segment Kokoro prefetching for continuous playback between sections
 - Paragraph-based narration with distinct pauses for paragraphs, headings, scene breaks, and chapter transitions
 - Helpful malformed-file and DRM errors
 - Embedded Neuroma application icon for Windows shortcuts and file associations
+- Runs on Windows, macOS, and Linux (x64 and ARM64)
 - No runtime package dependencies
 
 ## Use
@@ -28,8 +29,15 @@ is the EPUB sibling of NeuroMD and keeps the same local, read-only philosophy.
 .\dist\Neuroma.exe "C:\Books\book.epub"
 ```
 
+```sh
+./dist/Neuroma ~/Books/book.epub
+```
+
 Run `Register-Neuroma.cmd` after building to add Neuroma to Windows' **Open
-with** list for `.epub` files. This is per-user and needs no administrator access.
+with** list for `.epub` files. On Linux, `./Register-Neuroma.sh` installs a
+desktop entry under `~/.local/share/applications` so GNOME, KDE, and other
+desktops offer Neuroma (in a terminal) for EPUB files. Both are per-user and
+need no administrator access.
 The interactive reader opens on the Neuroma splash screen: press Enter or Space
 to open the book, `F11` to resize first, or `q` to exit. `--plain` output bypasses
 the splash entirely.
@@ -51,7 +59,9 @@ the splash entirely.
 
 Neuroma uses a low-glare, black-background colour scheme with no solid colour
 bars. Windows Terminal can also enter its native fullscreen mode with `F11` or
-`Alt+Enter`, depending on its configured shortcuts.
+`Alt+Enter`, depending on its configured shortcuts. On Linux, `F11` sends the
+standard xterm full-screen request; terminals that do not honour it (or that
+reserve `F11` for themselves) simply ignore it.
 The header and footer use darker neutral greys so the book remains the clearest
 and brightest layer on screen.
 
@@ -82,7 +92,11 @@ If the configured endpoint cannot be reached, `s` opens the Kokoro setup panel.
 Press `i` to install or start a private local service, `r` to retry the configured
 endpoint, or Escape to continue without speech. Windows stores it under
 `%LOCALAPPDATA%\Neuroma\Kokoro`; Apple Silicon Macs use
-`~/Library/Application Support/Neuroma/Kokoro` and enable Apple's MPS acceleration.
+`~/Library/Application Support/Neuroma/Kokoro` and enable Apple's MPS acceleration;
+Linux (x64 or ARM64) uses `${XDG_DATA_HOME:-~/.local/share}/Neuroma/Kokoro` and
+runs on the CPU. On Linux machines with an NVIDIA GPU, run
+`NEUROMA_KOKORO_DEVICE=cuda ./Install-Neuroma-Kokoro.sh` once to install the CUDA
+build of PyTorch instead (a much larger download).
 The installer obtains Astral `uv` without administrator access, then downloads a
 pinned Kokoro-FastAPI revision and checksum-verified model files. The first
 installation is a substantial download and may take several minutes. If NeuroMD
@@ -94,7 +108,12 @@ macOS narration uses the built-in `afplay` utility, including pause, resume, and
 timed word highlighting. No Homebrew, Docker, X11, or separate audio package is
 required.
 
-Copy `neuroma.example.json` to `neuroma.json` beside `Neuroma.exe` (or keep it
+Linux narration uses the first player it finds: `pw-play` (PipeWire), `paplay`
+(PulseAudio), `aplay` (ALSA), or `ffplay`. Most desktop distributions ship one
+of these already; otherwise install `pipewire-bin`, `pulseaudio-utils`, or
+`alsa-utils`. The installer needs `curl` or `wget`, plus `tar`.
+
+Copy `neuroma.example.json` to `neuroma.json` beside `Neuroma.exe` / `Neuroma` (or keep it
 in the working directory) and set the same endpoint, voice, and speed used by
 NeuroMD:
 
@@ -120,15 +139,24 @@ Install the .NET 8 SDK, then run:
 The script runs the dependency-free test harness and publishes a self-contained,
 single-file Windows x64 executable to `dist\Neuroma.exe`.
 
+On Linux or macOS, run:
+
+```sh
+./build.sh
+```
+
+This publishes a self-contained executable for the current machine to
+`dist/Neuroma` (set `NEUROMA_RID`, for example `linux-arm64`, to cross-build).
+
 ## Continuous integration and releases
 
 Every pull request to `main` runs the full test harness and an application-startup
-check on GitHub-hosted Windows and macOS machines. Changes should be merged only
-after both required checks pass.
+check on GitHub-hosted Windows, macOS, and Linux machines. Changes should be
+merged only after all three required checks pass.
 
-Pushing a version tag such as `v0.10.0` validates both operating systems and
-packages three self-contained downloads: Windows x64, macOS Apple Silicon, and
-macOS Intel. Tag builds are attached automatically to a generated GitHub Release.
+Pushing a version tag such as `v0.10.0` validates all three operating systems and
+packages five self-contained downloads: Windows x64, macOS Apple Silicon, macOS
+Intel, Linux x64, and Linux ARM64. Tag builds are attached automatically to a generated GitHub Release.
 
 Neuroma supports standard reflowable EPUB 2/3. PNG, JPEG, GIF, BMP, and WebP
 illustrations are resized to the available page and rendered as true-colour

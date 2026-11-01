@@ -147,7 +147,7 @@ internal static class Program
                    File.Exists(Path.Combine(AppContext.BaseDirectory, "Start-Neuroma-Kokoro.ps1")) &&
                    File.Exists(Path.Combine(AppContext.BaseDirectory, "Install-Neuroma-Kokoro.sh")) &&
                    File.Exists(Path.Combine(AppContext.BaseDirectory, "Start-Neuroma-Kokoro.sh")),
-                "ships the Windows and macOS Kokoro setup scripts beside Neuroma");
+                "ships the Windows, macOS, and Linux Kokoro setup scripts beside Neuroma");
             bool nextStartedBeforePlayback = false;
             var played = new List<int>();
             SpeechPrefetchPipeline.RunAsync<int, int>([0, 1, 2],

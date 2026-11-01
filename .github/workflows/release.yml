@@ -19,6 +19,8 @@ jobs:
             os: windows-latest
           - label: macOS
             os: macos-latest
+          - label: Linux
+            os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -48,6 +50,14 @@ jobs:
             os: macos-latest
             rid: osx-x64
             archive: Neuroma-osx-x64.tar.gz
+          - label: Linux x64
+            os: ubuntu-latest
+            rid: linux-x64
+            archive: Neuroma-linux-x64.tar.gz
+          - label: Linux ARM64
+            os: ubuntu-latest
+            rid: linux-arm64
+            archive: Neuroma-linux-arm64.tar.gz
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -76,6 +86,15 @@ jobs:
         run: |
           mkdir -p "release/Neuroma-${{ matrix.rid }}"
           cp release/publish/Neuroma README.md neuroma.example.json Install-Neuroma-Kokoro.sh Start-Neuroma-Kokoro.sh "release/Neuroma-${{ matrix.rid }}/"
+          chmod +x "release/Neuroma-${{ matrix.rid }}/Neuroma" "release/Neuroma-${{ matrix.rid }}/"*.sh
+          tar -czf "release/${{ matrix.archive }}" -C release "Neuroma-${{ matrix.rid }}"
+
+      - name: Package Linux files
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p "release/Neuroma-${{ matrix.rid }}"
+          cp release/publish/Neuroma README.md neuroma.example.json Install-Neuroma-Kokoro.sh Start-Neuroma-Kokoro.sh Register-Neuroma.sh "release/Neuroma-${{ matrix.rid }}/"
           chmod +x "release/Neuroma-${{ matrix.rid }}/Neuroma" "release/Neuroma-${{ matrix.rid }}/"*.sh
           tar -czf "release/${{ matrix.archive }}" -C release "Neuroma-${{ matrix.rid }}"
 
