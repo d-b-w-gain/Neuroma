@@ -175,6 +175,11 @@ export UV_CACHE_DIR="$install_root/cache"
 export UV_NO_PROGRESS=1
 
 if [ "$already_installed" != true ]; then
+    # Rebuild an environment left by an earlier attempt on a distribution Python.
+    if [ "${UV_PYTHON_PREFERENCE:-}" = "only-managed" ] && [ -f "$repository_directory/.venv/pyvenv.cfg" ] && \
+       ! grep -q "^home = $install_root/python/" "$repository_directory/.venv/pyvenv.cfg"; then
+        rm -rf "$repository_directory/.venv"
+    fi
     progress 30 "Installing Python and Kokoro dependencies"
     (
         cd "$repository_directory"
