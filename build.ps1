@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$localSdk = 'C:\Users\dbwga\.dotnet-sdk\dotnet.exe'
+$localSdk = Join-Path $HOME '.dotnet-sdk\dotnet.exe'
 if (Test-Path -LiteralPath $localSdk) { $dotnet = $localSdk }
 else {
     $command = Get-Command dotnet -ErrorAction SilentlyContinue
